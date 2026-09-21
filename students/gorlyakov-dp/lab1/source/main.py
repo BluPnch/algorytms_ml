@@ -1,4 +1,3 @@
-import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.datasets import load_wine
 
@@ -24,10 +23,8 @@ M = np.empty(X.shape[0])
 for i in range(X.shape[0]):
     M[i] = y[i] * (X[i, :] @ w)
 
-plt.scatter(np.arange(len(M)), np.sort(M))
-plt.axhline(0)
-plt.show()
+# L = (1 - M) ^ 2
+grad_L = np.empty((X.shape[0], X.shape[1]))
 
-print("max: ", max(M), " min: ", min(M))
-print("M > 0 count: ", np.sum(M > 0))
-print("M < 0 count: ", np.sum(M < 0))
+for i in range(X.shape[0]):
+    grad_L[i] = -2 * (1 - M) * y[i] * X[i]
