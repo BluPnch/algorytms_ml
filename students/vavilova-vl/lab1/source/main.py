@@ -1,9 +1,11 @@
 import csv
+import warnings
 from pathlib import Path
 
 import joblib
 import matplotlib.pyplot as plt
 import numpy as np
+from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     accuracy_score,
@@ -41,7 +43,7 @@ N_STARTS = 10
 N_ITERATIONS = 5000
 MAIN_MODEL_NAME = "Основная: Multistart SGD + Momentum + L2"
 
-best_model, multistart_losses = LinearClassifier.fit_primary(
+best_model, multistart_losses, primary_loss_history = LinearClassifier.fit_primary(
     X_train,
     y_train,
     n_starts=N_STARTS,
@@ -52,7 +54,7 @@ best_model, multistart_losses = LinearClassifier.fit_primary(
 )
 
 
-def fit_metric_model(name, features, targets, random_state=42):
+def fit_metric_model(name, features, targets, random_state=42, track_loss=False):
     if name == "Корреляция + скорейший спуск":
         model = LinearClassifier(
             features.shape[1],
@@ -95,10 +97,29 @@ def fit_metric_model(name, features, targets, random_state=42):
         model = LogisticRegression(
             fit_intercept=False,
             random_state=random_state,
-            max_iter=2000,
+            max_iter=1 if track_loss else 2000,
+            warm_start=track_loss,
         )
-        model.fit(features, targets)
-        history = []
+        if track_loss:
+            history = []
+            previous_loss = float("inf")
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", ConvergenceWarning)
+                for _ in range(200):
+                    model.fit(features, targets)
+                    positive_class_index = list(model.classes_).index(1)
+                    scores = (
+                        2 * model.predict_proba(features)[:, positive_class_index]
+                        - 1
+                    )
+                    loss = float(np.mean((targets - scores) ** 2) / 2)
+                    history.append(loss)
+                    if abs(previous_loss - loss) < 1e-12:
+                        break
+                    previous_loss = loss
+        else:
+            model.fit(features, targets)
+            history = []
     else:
         raise ValueError(f"Неизвестный вариант для сравнения: {name}")
 
@@ -119,9 +140,32 @@ for model_name in METRIC_MODEL_NAMES:
         model_name,
         X_train,
         y_train,
+        track_loss=model_name == "Эталон: LogisticRegression",
     )
 
 models = {MAIN_MODEL_NAME: best_model, **metric_models}
+training_histories = {
+    MAIN_MODEL_NAME: primary_loss_history,
+    **training_histories,
+}
+
+with (MODELS_DIR / "training_loss_history.csv").open(
+    "w", newline="", encoding="utf-8-sig"
+) as history_file:
+    writer = csv.DictWriter(
+        history_file,
+        fieldnames=("model", "step", "train_half_mse"),
+    )
+    writer.writeheader()
+    for name, history in training_histories.items():
+        writer.writerows(
+            {
+                "model": name,
+                "step": step,
+                "train_half_mse": loss,
+            }
+            for step, loss in enumerate(history, start=1)
+        )
 
 
 def model_scores(model, features):
@@ -362,7 +406,7 @@ fig.savefig(GRAPHS_DIR / "main_model_margins.png", dpi=160)
 plt.close(fig)
 
 fig, axis = plt.subplots(figsize=(9, 5))
-quality_history = training_histories["Рекуррентная оценка качества"]
+quality_history = metric_models["Рекуррентная оценка качества"].quality_history
 axis.plot(np.arange(1, len(quality_history) + 1), quality_history)
 axis.set_xlabel("Итерация")
 axis.set_ylabel("Рекуррентная оценка качества")

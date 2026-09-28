@@ -76,6 +76,7 @@ class LinearClassifier:
 
         best_model = None
         best_loss = float("inf")
+        best_history = []
         results = []
 
         for start in range(n_starts):
@@ -116,8 +117,9 @@ class LinearClassifier:
             if final_loss < best_loss:
                 best_loss = final_loss
                 best_model = model
+                best_history = loss_history
 
-        return best_model, results
+        return best_model, results, best_history
 
     @staticmethod
     def correlation_initialization(X, y):
@@ -411,6 +413,7 @@ class LinearClassifier:
         quality = 0.0
 
         quality_history = []
+        loss_history = []
 
         for _ in range(n_iterations):
 
@@ -435,8 +438,10 @@ class LinearClassifier:
             )
 
             quality_history.append(quality)
+            loss_history.append(self.loss(X, y))
 
-        return quality_history
+        self.quality_history = quality_history
+        return loss_history
 
     def fit_sgd_random_presentation(
         self,
