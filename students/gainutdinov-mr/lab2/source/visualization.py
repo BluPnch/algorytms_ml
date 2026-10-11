@@ -13,6 +13,7 @@ from PIL import Image, ImageSequence
 GRID_SIZE = 120
 ANIMATION_GRID_SIZE = 75
 PREDICTION_BATCH_SIZE = 512
+Predictor = Callable[[np.ndarray, np.ndarray, np.ndarray], np.ndarray]
 
 
 class Visualizer:
@@ -64,6 +65,10 @@ class Visualizer:
             title="Риск скользящего контроля по всем признакам",
             ylim=(0, None),
         )
+        if "n_train" in results:
+            ax.set_title(
+                f"Риск LOO по всем признакам: train = {results['n_train'].iloc[0]}"
+            )
         ax.grid(alpha=0.25)
         ax.legend()
         return self._save_figure(fig, output_name)
@@ -83,10 +88,18 @@ class Visualizer:
             ("macro_f1", "Macro-F1"),
             ("predict_seconds", "Время predict, с"),
         ]
+        names = results["name"]
+        if "k" in results:
+            names = [f"{name}\nk={k}" for name, k in zip(names, results["k"])]
+        if "n_reference" in results:
+            names = [
+                f"{name}\nОпорных объектов: {count}"
+                for name, count in zip(names, results["n_reference"])
+            ]
         fig, axes = plt.subplots(1, 3, figsize=(15, 5))
         for ax, (column, label) in zip(axes, metrics):
             values = results[column].to_numpy(dtype=float)
-            bars = ax.bar(results["name"], values, color="tab:blue", alpha=0.8)
+            bars = ax.bar(names, values, color="tab:blue", alpha=0.8)
             ax.bar_label(bars, fmt="%.3f", fontsize=9)
             ax.set_ylabel(label)
             ax.set_ylim(bottom=0)
@@ -96,7 +109,10 @@ class Visualizer:
                 ax.set_ylim(0, 1.08)
             for position in np.flatnonzero(~np.isfinite(values)):
                 ax.text(position, 0, "нет данных", ha="center", va="bottom", fontsize=8)
-        fig.suptitle("Сравнение на test по всем признакам")
+        title = "Сравнение на test по всем признакам"
+        if "n_test" in results and results["n_test"].nunique() == 1:
+            title += f"; test = {results['n_test'].iloc[0]} объектов"
+        fig.suptitle(title)
         return self._save_figure(fig, output_name)
 
     def plot_classification(
@@ -106,9 +122,7 @@ class Visualizer:
         X_test: np.ndarray,
         y_test: np.ndarray,
         *,
-        predictors: Mapping[
-            str, Callable[[np.ndarray, np.ndarray, np.ndarray], np.ndarray]
-        ],
+        predictors: Mapping[str, Predictor],
         output_prefix: str = "classification",
     ) -> list[Path]:
         """Сравнить переданные классификаторы в каждой выбранной проекции.
@@ -135,7 +149,10 @@ class Visualizer:
                 )
                 ax.set_title(f"{name}\nAccuracy на test в 2D: {accuracy:.1%}")
                 self._label_axes(ax, projection)
-            fig.suptitle(" + ".join(projection))
+            fig.suptitle(
+                f"{' + '.join(projection)}\n"
+                f"Train: {len(X_train)} объектов; test: {len(X_test)} объектов"
+            )
             handles, labels = axes[0, 0].get_legend_handles_labels()
             fig.legend(handles, labels, loc="lower center", ncol=len(classes))
             fig.tight_layout(rect=(0, 0.09, 1, 0.94))
@@ -153,18 +170,24 @@ class Visualizer:
         *,
         title: str,
         output_prefix: str = "prototypes",
+        predictor: Predictor | None = None,
+        classifier_name: str = "1NN",
+        minimum_reference_size: int = 1,
     ) -> list[Path]:
-        """Сравнить 1NN по всему train и выбранным эталонам в каждой проекции.
+        """Сравнить классификатор по всему train и по выбранным эталонам.
 
         Эталоны из train показаны звёздами. Обычные точки представляют
         объекты test с истинными классами.
-        Фон и accuracy относятся к отдельным двумерным моделям 1NN.
+        Фон и accuracy относятся к отдельным двумерным моделям predictor.
+        Без predictor используется 1NN. Если опорных объектов недостаточно,
+        фон не строится, а accuracy подписывается как недоступная.
         """
+        predictor = self._predict_1nn if predictor is None else predictor
         indices = np.sort(np.asarray(indices))
         classes = np.unique(np.concatenate((y_train, y_test)))
         support_sets = [
-            ("1NN по всему train", np.arange(len(X_train))),
-            ("1NN по эталонам", indices),
+            (f"{classifier_name} по всему train", np.arange(len(X_train))),
+            (f"{classifier_name} по эталонам", indices),
         ]
         paths = []
         for projection in self.projections:
@@ -181,12 +204,13 @@ class Visualizer:
                     y_test,
                     grid,
                     classes,
-                    self._predict_1nn,
+                    predictor,
+                    minimum_reference_size,
                 )
                 self._draw_prototypes(ax, train_2d, y_train, indices, classes)
                 ax.set_title(
                     f"{name}: {len(support_indices)} объектов\n"
-                    f"Accuracy на test в 2D: {accuracy:.1%}"
+                    f"Accuracy на test в 2D: {self._format_accuracy(accuracy)}"
                 )
                 self._label_axes(ax, projection)
             fig.suptitle(f"{title}: {' + '.join(projection)}")
@@ -195,7 +219,8 @@ class Visualizer:
             fig.text(
                 0.5,
                 0.07,
-                f"Отбор по всем {X_train.shape[1]} признакам. Фон и accuracy: 1NN в 2D.",
+                f"Отбор: CCV 1NN по {X_train.shape[1]} признакам. "
+                f"Фон и accuracy: {classifier_name} в 2D. Test: {len(X_test)} объектов.",
                 ha="center",
                 fontsize=9,
             )
@@ -211,9 +236,10 @@ class Visualizer:
         title: str,
         test_errors: Sequence[float] | None = None,
         mark_ccv_minimum: bool = False,
+        classifier_name: str = "1NN",
         output_name: str = "selection_history.png",
     ) -> Path:
-        """Показать CCV и, при наличии, ошибку 1NN на test по всем признакам.
+        """Показать CCV отбора и ошибку classifier_name на test по всем признакам.
 
         test_errors соответствует всем записям history, включая начальную.
         mark_ccv_minimum отмечает минимум CCV вертикальной пунктирной линией.
@@ -228,7 +254,9 @@ class Visualizer:
         fig, ax = plt.subplots(figsize=(10, 5))
         ax.plot(counts, ccv_values, "o-", markersize=3, label="CCV отбора (1NN)")
         if test_errors is not None:
-            ax.plot(counts, test_errors, "--", label="Ошибка 1NN на test")
+            ax.plot(
+                counts, test_errors, "--", label=f"Ошибка {classifier_name} на test"
+            )
         ax.scatter(
             counts[-1],
             ccv_values[-1],
@@ -250,7 +278,7 @@ class Visualizer:
         ax.set(
             xlabel="Количество эталонов",
             ylabel="Доля ошибок",
-            title=f"{title}: метрики 1NN по всем признакам",
+            title=f"{title}: метрики по всем признакам",
             ylim=(0, None),
         )
         ax.grid(alpha=0.25)
@@ -271,16 +299,22 @@ class Visualizer:
         frame_duration_ms: int = 2000,
         final_hold_ms: int = 6000,
         max_steps: int | None = None,
+        predictor: Predictor | None = None,
+        classifier_name: str = "1NN",
+        minimum_reference_size: int = 1,
     ) -> list[Path]:
         """Сохранить GIF по выбранным проекциям и вернуть пути.
 
         Показывать начальное множество и принятые изменения из history.
         Один график на кадр, выбранный объект выделяется окружностью.
         max_steps ограничивает число показываемых изменений с указанием
-        исходных номеров шагов. На кадре: CCV, accuracy 2D и accuracy 1NN
-        по всем признакам из accuracy_all_features. Массив метрик соответствует
-        полной history; ошибки красными кольцами не отмечаются.
+        исходных номеров шагов. На кадре: CCV 1NN и accuracy classifier_name
+        в 2D и по всем признакам. accuracy_all_features соответствует полной
+        history и тому же классификатору. При недостатке опорных объектов
+        accuracy недоступна; k не изменяется. Без predictor фон строит 1NN.
+        Ошибки красными кольцами не отмечаются.
         """
+        predictor = self._predict_1nn if predictor is None else predictor
         if operation not in ("addition", "removal"):
             raise ValueError("operation должен быть 'addition' или 'removal'")
         if not history or len(accuracy_all_features) != len(history):
@@ -314,14 +348,15 @@ class Visualizer:
             fig.text(
                 0.5,
                 0.02,
-                f"Отбор: все {X_train.shape[1]} признаков. Фон: 1NN в 2D.",
+                f"Отбор: CCV 1NN по {X_train.shape[1]} признакам. "
+                f"Фон: {classifier_name} в 2D. Test: {len(X_test)} объектов.",
                 ha="center",
                 fontsize=9,
             )
             frames = []
             for position in positions:
                 entry = history[position]
-                # Меньший исходный индекс первым участвует в разрешении равных расстояний.
+                # Сохраняем порядок индексов для воспроизводимого сравнения моделей.
                 indices = np.sort(np.asarray(entry["indices"]))
                 ax.clear()
                 accuracy_2d = self._draw_classification(
@@ -332,7 +367,8 @@ class Visualizer:
                     y_test,
                     grid,
                     classes,
-                    self._predict_1nn,
+                    predictor,
+                    minimum_reference_size,
                 )
                 self._draw_prototypes(ax, train_2d, y_train, indices, classes)
                 changed_index = entry["changed_index"]
@@ -355,9 +391,10 @@ class Visualizer:
                         label="Выбранный объект",
                     )
                 ax.set_title(
-                    f"Эталонов: {len(indices)}; CCV (все признаки): {entry['ccv']:.5f}\n"
-                    f"Accuracy 1NN на test: 2D = {accuracy_2d:.1%}; "
-                    f"все признаки = {accuracy_all_features[position]:.1%}",
+                    f"Эталонов: {len(indices)}; CCV 1NN (все признаки): {entry['ccv']:.5f}\n"
+                    f"Accuracy {classifier_name} на test: "
+                    f"2D = {self._format_accuracy(accuracy_2d)}; "
+                    f"все признаки = {self._format_accuracy(accuracy_all_features[position])}",
                     fontsize=10,
                 )
                 self._label_axes(ax, projection)
@@ -459,29 +496,45 @@ class Visualizer:
         )
 
     def _draw_classification(
-        self, ax, X_fit, y_fit, X_test, y_test, grid, classes, predictor
+        self,
+        ax,
+        X_fit,
+        y_fit,
+        X_test,
+        y_test,
+        grid,
+        classes,
+        predictor,
+        minimum_reference_size: int = 1,
     ) -> float:
-        """Нарисовать фон и test, вернуть accuracy в этих двух координатах."""
+        """Нарисовать фон и test, вернуть accuracy в этих двух координатах.
+
+        При недостатке опорных объектов показать точки без фона и вернуть NaN.
+        """
         if len(X_test) == 0:
             raise ValueError("Для accuracy нужен непустой test")
         xx, yy = grid
-        grid_points = np.column_stack((xx.ravel(), yy.ravel()))
-        queries = np.vstack((grid_points, X_test))
-        predictions = self._predict_batches(predictor, X_fit, y_fit, queries)
-        if not np.isin(predictions, classes).all():
-            raise ValueError("Классификатор вернул неизвестные метки классов")
-        background = np.searchsorted(classes, predictions[: len(grid_points)])
         colors = plt.get_cmap("tab10")(np.arange(len(classes)))
-        ax.pcolormesh(
-            xx,
-            yy,
-            background.reshape(xx.shape),
-            cmap=ListedColormap(colors),
-            vmin=-0.5,
-            vmax=len(classes) - 0.5,
-            alpha=0.25,
-            shading="auto",
-        )
+        accuracy = np.nan
+        if len(X_fit) >= minimum_reference_size:
+            grid_points = np.column_stack((xx.ravel(), yy.ravel()))
+            queries = np.vstack((grid_points, X_test))
+            predictions = self._predict_batches(predictor, X_fit, y_fit, queries)
+            if not np.isin(predictions, classes).all():
+                raise ValueError("Классификатор вернул неизвестные метки классов")
+            background = np.searchsorted(classes, predictions[: len(grid_points)])
+            ax.pcolormesh(
+                xx,
+                yy,
+                background.reshape(xx.shape),
+                cmap=ListedColormap(colors),
+                vmin=-0.5,
+                vmax=len(classes) - 0.5,
+                alpha=0.25,
+                shading="auto",
+            )
+            accuracy = float(np.mean(predictions[len(grid_points) :] == y_test))
+
         for label, color in zip(classes, colors):
             points = X_test[y_test == label]
             ax.scatter(
@@ -496,7 +549,7 @@ class Visualizer:
             )
         ax.set_xlim(xx.min(), xx.max())
         ax.set_ylim(yy.min(), yy.max())
-        return float(np.mean(predictions[len(grid_points) :] == y_test))
+        return accuracy
 
     @staticmethod
     def _draw_prototypes(ax, X_train, y_train, indices, classes) -> None:
@@ -537,6 +590,10 @@ class Visualizer:
                 )
             predictions.append(batch)
         return np.concatenate(predictions)
+
+    @staticmethod
+    def _format_accuracy(value: float) -> str:
+        return f"{value:.1%}" if np.isfinite(value) else "недоступно"
 
     @staticmethod
     def _label_axes(ax, projection: tuple[str, str]) -> None:
