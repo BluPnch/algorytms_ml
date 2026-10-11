@@ -19,19 +19,21 @@ for j in range(X.shape[1]):
     w[j] = (y @ X[:, j]) / (X[:, j] @ X[:, j])
 
 M = np.empty(X.shape[0])
-
-for i in range(X.shape[0]):
-    M[i] = y[i] * (X[i, :] @ w)
-
 # L = (1 - M) ^ 2
 grad_L = np.empty((X.shape[0], X.shape[1]))
 
-for i in range(X.shape[0]):
-    grad_L[i] = -2 * (1 - M) * y[i] * X[i]
-
 lambd = 0.1
-sample_idx = np.random.choice(len(M), size=10, replace=False)
-Q = np.mean((1 - M[sample_idx]) ** 2)
 
-for m in range(1, len(M)):
-    Q = lambd * (1 - M[m]) ** 2 + (1 - lambd) * Q
+sample_idx = np.random.choice(len(X), size=10, replace=False)
+M_sample = y[sample_idx] * (X[sample_idx] @ w)
+Q = np.mean((1 - M_sample) ** 2)
+
+h = 0.001
+
+for _ in range(X.shape[0]):
+    i = np.random.randint(X.shape[0])
+    M[i] = y[i] * (X[i, :] @ w)
+    loss_i = (1 - M[i]) ** 2
+    grad_L[i] = -2 * (1 - M[i]) * y[i] * X[i]
+    w = w - h * grad_L[i]
+    Q = lambd * loss_i + (1 - lambd) * Q
