@@ -99,4 +99,3 @@ class StandardScaler:
 
     def fit_transform(self, X: np.ndarray) -> np.ndarray:
         return self.fit(X).transform(X)
-    
