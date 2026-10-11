@@ -10,6 +10,8 @@ class PrototypeSelector:
 
     Тестовые данные в интерфейс отбора не входят. Индексы эталонов относятся
     к строкам X_train, а не ко всему исходному CSV. l = len(X_train) - control_size.
+    Текущее множество prototype_indices локально для каждого запуска отбора.
+    Для каждого пробного множества вычисляется CCV через метод ccv.
 
     Оба метода возвращают (indices, history). history содержит список словарей:
         step: номер шага, начиная с 0;
@@ -19,9 +21,9 @@ class PrototypeSelector:
         ccv: значение CCV после шага.
 
     Шаг 0 содержит начальное множество, остальные шаги содержат принятые изменения.
-    Причина остановки сохраняется в stop_reason_. Жадные методы пока являются
-    пустышками. Расстояния и веса CCV вычисляются при первом обращении
-    и используются повторно для разных множеств эталонов.
+    Причина остановки сохраняется в stop_reason_. Расстояния и веса CCV
+    вычисляются при первом обращении и используются повторно
+    для разных множеств эталонов.
     """
 
     def __init__(
@@ -87,20 +89,10 @@ class PrototypeSelector:
 
         if self.distance_cache_ is None:
             self.distance_cache_ = self._build_distance_cache()
-        # Расстояния от X[i] элемента до всех существующих эталонов
-
-        distances_to_prototypes = self.distance_cache_[:, indices]  # (N, |Omega|, D)
-        # Практически идентично np.argsort(distances_to_prototypes, axis=1)[:, :M]
-        prototypes_order = np.lexsort(
-            (
-                np.broadcast_to(indices, distances_to_prototypes.shape),
-                distances_to_prototypes,
-            ),
-            axis=1,
-        )[:, :M]
-        # (N, M <= O, D)
-        neighbours = indices[prototypes_order]  # Среди эталонов выберем 1:M самых ближайших эталоннов - соседей
-        return np.mean(self.y_train[:, None] != self.y_train[neighbours], axis=0) # Считаем профиль компакности по формуле
+        neighbours = self._cached_neighbours(indices, M)
+        return np.mean(
+            self.y_train[:, None] != self.y_train[neighbours], axis=0
+        )  # Считаем профиль компакности по формуле
 
     def ccv(self, indices: np.ndarray | None = None) -> float:
         """Рассчитать CCV для 1NN по указанным эталонам; None означает весь train.
@@ -118,11 +110,47 @@ class PrototypeSelector:
     def greedy_addition(self) -> tuple[np.ndarray, list[dict[str, object]]]:
         """Вернуть эталоны и историю жадного добавления.
 
-        Начать с первого объекта каждого класса. На каждом шаге выбрать
-        лучшее добавление и принять его только при строгом уменьшении CCV.
-        Множество должно содержать минимум control_size + 1 объектов.
+        Начать с первого объекта каждого класса. Для каждого кандидата
+        рассчитать CCV множества с этим объектом и выбрать лучший вариант.
+        Принять добавление только при строгом уменьшении CCV.
+        Если начальных эталонов мало, дополнить до control_size + 1.
+        При равных оценках выбрать меньший индекс.
         """
-        raise NotImplementedError("TODO: жадное добавление эталонов")
+        prototype_indices = self._initial_prototypes()
+        all_indices = np.arange(len(self.X_train))
+        self.stop_reason_ = None
+        current_ccv = self.ccv(prototype_indices)
+        history = [self._history_entry(prototype_indices, current_ccv, 0)]
+
+        while True:
+            candidates = np.setdiff1d(all_indices, prototype_indices)
+            if len(candidates) == 0:
+                self.stop_reason_ = "Выбраны все обучающие объекты"
+                break
+
+            # Ищем объект, добавление которого даёт наименьший CCV.
+            best_index = None
+            best_ccv = np.inf
+            for index in candidates:
+                candidate_indices = np.append(prototype_indices, index)
+                candidate_ccv = self.ccv(candidate_indices)
+                if candidate_ccv < best_ccv:
+                    best_index = int(index)
+                    best_ccv = candidate_ccv
+
+            if best_ccv >= current_ccv:
+                self.stop_reason_ = "Нет добавления, уменьшающего CCV"
+                break
+
+            prototype_indices = np.append(prototype_indices, best_index)
+            current_ccv = best_ccv
+            history.append(
+                self._history_entry(
+                    prototype_indices, current_ccv, len(history), best_index
+                )
+            )
+
+        return prototype_indices, history
 
     def greedy_removal(
         self,
@@ -131,11 +159,101 @@ class PrototypeSelector:
     ) -> tuple[np.ndarray, list[dict[str, object]]]:
         """Вернуть эталоны и историю жадного удаления, начиная со всего train.
 
-        Выбрать лучшее допустимое удаление. Принять его, если новый CCV
-        не превышает предыдущий CCV + tolerance. Допуск относится к одному шагу.
+        Для каждого допустимого удаления рассчитать CCV оставшегося множества.
+        Выбрать лучший вариант и принять его, если новый CCV не превышает
+        предыдущий CCV + tolerance. Допуск относится к одному шагу.
         Сохранить каждый класс и минимум control_size + 1 объектов.
+        При равных оценках выбрать меньший индекс.
         """
-        raise NotImplementedError("TODO: жадное удаление эталонов")
+        if (
+            isinstance(tolerance, (bool, np.bool_))
+            or not isinstance(tolerance, (int, float, np.integer, np.floating))
+            or not np.isfinite(tolerance)
+            or tolerance < 0
+        ):
+            raise ValueError("tolerance должен быть конечным неотрицательным числом")
+
+        prototype_indices = np.arange(len(self.X_train))
+        minimum_size = self.control_size + 1
+        self.stop_reason_ = None
+        current_ccv = self.ccv(prototype_indices)
+        history = [self._history_entry(prototype_indices, current_ccv, 0)]
+
+        while True:
+            if len(prototype_indices) == minimum_size:
+                self.stop_reason_ = "Достигнуто минимальное число эталонов"
+                break
+
+            # Ищем объект, удаление которого даёт наименьший CCV.
+            best_index = None
+            best_ccv = np.inf
+            prototype_labels = self.y_train[prototype_indices]
+            for index in prototype_indices:
+                # Последний эталон своего класса удалять нельзя.
+                if np.count_nonzero(prototype_labels == self.y_train[index]) == 1:
+                    continue
+
+                candidate_indices = prototype_indices[prototype_indices != index]
+                candidate_ccv = self.ccv(candidate_indices)
+                if candidate_ccv < best_ccv:
+                    best_index = int(index)
+                    best_ccv = candidate_ccv
+
+            if best_index is None:
+                self.stop_reason_ = "Каждый класс представлен единственным эталоном"
+                break
+            if best_ccv > current_ccv + tolerance:
+                self.stop_reason_ = "Лучшее удаление превышает допуск CCV"
+                break
+
+            prototype_indices = prototype_indices[prototype_indices != best_index]
+            current_ccv = best_ccv
+            history.append(
+                self._history_entry(
+                    prototype_indices, current_ccv, len(history), best_index
+                )
+            )
+
+        return prototype_indices, history
+
+    def _initial_prototypes(self) -> np.ndarray:
+        """Выбрать по одному объекту каждого класса и дополнить до минимума."""
+        _, prototype_indices = np.unique(self.y_train, return_index=True)
+        extra_count = self.control_size + 1 - len(prototype_indices)
+        if extra_count > 0:
+            remaining_indices = np.setdiff1d(
+                np.arange(len(self.X_train)), prototype_indices
+            )
+            prototype_indices = np.concatenate(
+                (prototype_indices, remaining_indices[:extra_count])
+            )
+        return prototype_indices
+
+    @staticmethod
+    def _history_entry(
+        indices: np.ndarray,
+        ccv: float,
+        step: int,
+        changed_index: int | None = None,
+    ) -> dict[str, object]:
+        """Сохранить независимую копию множества и значение CCV для одного шага."""
+        return {
+            "step": step,
+            "indices": indices.copy(),
+            "changed_index": changed_index,
+            "n_prototypes": len(indices),
+            "ccv": float(ccv),
+        }
+
+    def _cached_neighbours(self, indices: np.ndarray, count: int) -> np.ndarray:
+        """Получить первые count соседей из текущего множества эталонов."""
+        # Расстояния от каждого объекта до существующих эталонов: (N, |Omega|).
+        distances = self.distance_cache_[:, indices]
+        # При равных расстояниях учитываем исходный индекс эталона.
+        order = np.lexsort(
+            (np.broadcast_to(indices, distances.shape), distances), axis=1
+        )[:, :count]
+        return indices[order]  # (N, count)
 
     def _build_distance_cache(self) -> np.ndarray:
         """Построить общий кэш расстояний для текущей выборки; диагональ равна inf."""
