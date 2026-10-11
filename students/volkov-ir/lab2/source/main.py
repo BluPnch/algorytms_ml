@@ -27,7 +27,7 @@ def calculate_parzen(X, y, u, k):
     shear = nearest_idx[0:k]
     shear_y = y[shear]
     p = dist_ux[shear]
-    w = np.exp(-(p**2/(2*h**2)))
+    w = np.exp(-2 * (p / h) ** 2)
     sums_per_class = np.bincount(shear_y, weights=w)
     pred = np.argmax(sums_per_class)
     return pred
@@ -39,7 +39,7 @@ def calculate_parzen_lecture(X, y, u, k):
     nearest_idx = np.argsort(dist_ux)
     h = dist_ux[nearest_idx[k]]
     p = dist_ux
-    w = np.exp(-(p ** 2 / (2 * h ** 2)))
+    w = np.exp(-2 * (p / h) ** 2)
     sums_per_class = np.bincount(y, weights=w)
     pred = np.argmax(sums_per_class)
     return pred

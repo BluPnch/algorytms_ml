@@ -15,7 +15,7 @@ K_CHECK = list(range(1, 51))
 def gaussian_parzen_weights(dist):
     # sklearn отдаёт расстояния до k+1 соседей: последний задаёт ширину окна и сам не голосует
     h = dist[:, -1:]
-    w = np.exp(-dist ** 2 / (2 * h ** 2))
+    w = np.exp(-2 * (dist / h) ** 2)
     w[:, -1] = 0
     return w
 
@@ -23,7 +23,7 @@ def gaussian_parzen_weights(dist):
 def gaussian_parzen_lecture_weights(dist, k):
     # sklearn отдаёт расстояния до всех объектов по возрастанию: ширина окна — (k+1)-й из них
     h = dist[:, k:k + 1]
-    return np.exp(-dist ** 2 / (2 * h ** 2))
+    return np.exp(-2 * (dist / h) ** 2)
 
 
 # у модели с гауссовыми весами n_neighbors = k+1; у варианта лекции соседи — вся обучающая выборка (n объектов)
