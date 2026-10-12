@@ -93,7 +93,7 @@ class Visualizer:
             names = [f"{name}\nk={k}" for name, k in zip(names, results["k"])]
         if "n_reference" in results:
             names = [
-                f"{name}\nОпорных объектов: {count}"
+                f"{name}\nЭталонов: {count}"
                 for name, count in zip(names, results["n_reference"])
             ]
         fig, axes = plt.subplots(1, 3, figsize=(15, 5))
