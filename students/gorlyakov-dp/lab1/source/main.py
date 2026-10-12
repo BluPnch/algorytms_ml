@@ -29,11 +29,16 @@ M_sample = y[sample_idx] * (X[sample_idx] @ w)
 Q = np.mean((1 - M_sample) ** 2)
 
 h = 0.001
+max_iter = 10000
 
-for _ in range(X.shape[0]):
+v = np.zeros_like(w)
+gamma = 0.9
+
+for _ in range(max_iter):
     i = np.random.randint(X.shape[0])
     M[i] = y[i] * (X[i, :] @ w)
     loss_i = (1 - M[i]) ** 2
     grad_L[i] = -2 * (1 - M[i]) * y[i] * X[i]
-    w = w - h * grad_L[i]
+    v = gamma * v + (1 - gamma) * grad_L[i]
+    w = w - h * v
     Q = lambd * loss_i + (1 - lambd) * Q
