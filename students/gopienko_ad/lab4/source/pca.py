@@ -1,18 +1,20 @@
 import numpy as np
 
-class PCAfromSVD:
-	def __init__(self, n_components: int):
+class PCACustom:
+	def __init__(self, n_components: int | None = None):
 		self.n_components = n_components
-		self.mean_: np.ndarray
-		self.components_: np.ndarray
-		self.singular_values_: np.ndarray
-		self.explained_variance_: np.ndarray
-		self.explained_variance_ratio_: np.ndarray
-		self.all_explained_variance_: np.ndarray
-		self.all_explained_variance_ratio_: np.ndarray
-		self.rank_: int
+		self.n_components_: np.ndarray | None = None
+		self.mean_: np.ndarray | None = None
+		self.components_: np.ndarray | None = None
+		self.singular_values_: np.ndarray | None = None
+		self.explained_variance_: np.ndarray | None = None
+		self.explained_variance_ratio_: np.ndarray | None = None
+		self.all_singular_values_: np.ndarray | None = None
+		self.all_explained_variance_: np.ndarray | None = None
+		self.all_explained_variance_ratio_: np.ndarray | None = None
+		self.rank_: int | None = None
 
-	def fit(self, X: np.ndarray) -> "PCAfromSVD":
+	def fit(self, X: np.ndarray) -> "PCACustom":
 		X = np.asarray(X, dtype=float)
 		self.mean_ = X.mean(axis=0)
 		X_centered = X - self.mean_
@@ -23,12 +25,18 @@ class PCAfromSVD:
 
 		explained_ratios = eigenvalues / total_variance
 
-		self.n_components_ = self.n_components
+		max_components = len(s)
+		if self.n_components is None:
+			m = max_components
+		else:
+			m = self.n_components
+
+		self.n_components_ = m
 		self.rank_ = int(np.linalg.matrix_rank(X_centered))
-		self.components_ = vt[:self.n_components]
-		self.singular_values_ = s[:self.n_components]
-		self.explained_variance_ = eigenvalues[:self.n_components]
-		self.explained_variance_ratio_ = explained_ratios[:self.n_components]
+		self.components_ = vt[:m]
+		self.singular_values_ = s[:m]
+		self.explained_variance_ = eigenvalues[:m]
+		self.explained_variance_ratio_ = explained_ratios[:m]
 		self.all_singular_values_ = s
 		self.all_explained_variance_ = eigenvalues
 		self.all_explained_variance_ratio_ = explained_ratios
@@ -38,7 +46,7 @@ class PCAfromSVD:
 		X = np.asarray(X, dtype=float)
 		return (X - self.mean_) @ self.components_.T
 
-	def inverse_tranform(self, Z: np.ndarray) -> np.ndarray:
+	def inverse_transform(self, Z: np.ndarray) -> np.ndarray:
 		Z = np.asarray(Z, dtype=float)
 		return Z @ self.components_ + self.mean_
 

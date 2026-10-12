@@ -1,7 +1,7 @@
 import numpy as np
 
 
-class RidgeRegressionSVD:
+class LinearRegressionSVD:
     def __init__(self, alpha: float = 1.0):
         if alpha < 0:
             raise ValueError("alpha must be non-negative.")
@@ -10,7 +10,7 @@ class RidgeRegressionSVD:
         self.coef_: np.ndarray | None = None
         self.intercept_: float | None = None
 
-    def fit(self, X: np.ndarray, y: np.ndarray) -> "RidgeRegressionSVD":
+    def fit(self, X: np.ndarray, y: np.ndarray) -> "LinearRegressionSVD":
 
         X = np.asarray(X, dtype=float)
         y = np.asarray(y, dtype=float).reshape(-1)
