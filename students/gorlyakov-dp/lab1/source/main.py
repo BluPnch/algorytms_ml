@@ -33,6 +33,7 @@ max_iter = 10000
 
 v = np.zeros_like(w)
 gamma = 0.9
+t = 0.001
 
 for _ in range(max_iter):
     i = np.random.randint(X.shape[0])
@@ -40,5 +41,5 @@ for _ in range(max_iter):
     loss_i = (1 - M[i]) ** 2
     grad_L[i] = -2 * (1 - M[i]) * y[i] * X[i]
     v = gamma * v + (1 - gamma) * grad_L[i]
-    w = w - h * v
+    w = w * (1 - h * t) - h * v
     Q = lambd * loss_i + (1 - lambd) * Q
