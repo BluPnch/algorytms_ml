@@ -32,18 +32,25 @@ K_VALUES = tuple(range(1, 32))
 LOO_SAMPLE_SIZE = 1000
 PROJECTION_TRAIN_SIZE = 1000
 PROJECTION_TEST_SIZE = 1000
-SELECTION_TRAIN_SIZE = 2500//2
+SELECTION_TRAIN_SIZE = 2500 // 2
 SELECTION_TEST_SIZE = 5000
 CCV_CONTROL_SIZE = 2
 TIMING_REPEATS = 1
 # В GIF ограничены только показанные шаги; полная история сохраняется в CSV.
 SELECTION_GIF_MAX_STEPS = 20
 # Допуски одного шага соразмерны изменению доли ошибок на одном объекте.
-REMOVAL_TOLERANCES = (
+# REMOVAL_TOLERANCES = (
+#     0.0,
+#     0.5 / SELECTION_TRAIN_SIZE,
+#     1.0 / SELECTION_TRAIN_SIZE,
+# )
+BASELINE_REMOVAL_TOLERANCE = 0.001
+REMOVAL_TOLERANCES = [
     0.0,
-    0.5 / SELECTION_TRAIN_SIZE,
-    1.0 / SELECTION_TRAIN_SIZE,
-)
+    0.0005,
+    3.985e-4,
+    BASELINE_REMOVAL_TOLERANCE,
+]
 
 
 def make_parzen(k: int) -> ParzenClassifier:
