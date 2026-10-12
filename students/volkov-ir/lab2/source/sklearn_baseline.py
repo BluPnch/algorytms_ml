@@ -33,7 +33,8 @@ SKLEARN_MODELS = {
     "sklearn KNN + гауссово окно": lambda k, n: KNeighborsClassifier(n_neighbors=k + 1, weights=gaussian_parzen_weights),
     "sklearn гауссово окно (лекция)": lambda k, n: KNeighborsClassifier(n_neighbors=n, weights=partial(gaussian_parzen_lecture_weights, k=k)),
 }
-OWN_MODELS = {"свой KNN": ("knn", calculate_knn), "своё окно Парзена (по k)": ("parzen", calculate_parzen), "своё окно Парзена (лекция)": ("parzen_lecture", calculate_parzen_lecture)}
+# функции окна Парзена возвращают (класс, суммы весов по классам), для предсказаний нужен только класс
+OWN_MODELS = {"свой KNN": ("knn", calculate_knn), "своё окно Парзена (по k)": ("parzen", lambda X, y, u, k: calculate_parzen(X, y, u, k)[0]), "своё окно Парзена (лекция)": ("parzen_lecture", lambda X, y, u, k: calculate_parzen_lecture(X, y, u, k)[0])}
 
 
 def sklearn_loo(make_model):
