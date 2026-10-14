@@ -3,10 +3,12 @@ import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 
 from model import calculate_knn
-from metric import calculate_accuracy, calculate_macro_f1, confusion_matrix
+from metric import calculate_accuracy, calculate_macro_f1
 
 # папка для сохранения графиков (для README), None – графики только показываются
 SAVE_DIR = None
+# до какого k рисуется второй, увеличенный график LOO
+K_ZOOM = 50
 
 METHOD_NAMES = {"knn": "KNN", "parzen": "окно Парзена, сумма по k соседям", "parzen_lecture": "окно Парзена, сумма по всей выборке (лекция)", "knn_distance": "KNN, вес 1/расстояние"}
 # короткие названия для таблиц
@@ -32,7 +34,6 @@ def evaluate(y_true, pred_labels, n_classes):
         "accuracy": calculate_accuracy(y_true, pred_labels),
         "f1": calculate_macro_f1(y_true, pred_labels, n_classes),
         "errors": int(np.sum(pred_labels != y_true)),
-        "matrix": confusion_matrix(y_true, pred_labels, n_classes),
     }
 
 
@@ -72,19 +73,13 @@ def print_metrics(title, rows, n_test):
     print(f"(ошибок из {n_test})\n")
 
 
-def print_matrices(rows, class_names):
-    print(f"Матрицы ошибок, по строкам настоящий вид, по столбцам предсказанный, порядок {class_names}")
-    for impl, name, _, metrics in rows:
-        print(f"  {impl:<12}{name:<30}{metrics['matrix'].tolist()}")
-    print()
-
-
-def print_sklearn_check(all_loo, sklearn_results, k_check):
+def print_sklearn_check(all_loo, sklearn_results):
     print_title("Проверка реализации: LOO своих функций и sklearn")
     for method in ["knn", "parzen", "parzen_lecture"]:
-        own_loo = np.array(all_loo[method][:len(k_check)])
-        n_same = int(np.sum(np.isclose(own_loo, sklearn_results[method]["loo"])))
-        print(f"{METHOD_NAMES[method]:<46} совпадает при {n_same} из {len(k_check)} k")
+        sklearn_loo = sklearn_results[method]["loo"]
+        own_loo = np.array(all_loo[method][:len(sklearn_loo)])
+        n_same = int(np.sum(np.isclose(own_loo, sklearn_loo)))
+        print(f"{METHOD_NAMES[method]:<46} совпадает при {n_same} из {len(sklearn_loo)} k")
     print()
 
 
@@ -100,7 +95,13 @@ def print_prototypes(start_idx, omega_idx, history, y_train, class_names):
 
 # ---------- графики ----------
 
-def plot_loo_risk(all_loo, best_k, k_values, k_max, title, file_name):
+def plot_loo_risk(all_loo, best_k, k_values):
+    # два графика, для всех k и увеличенный для k до K_ZOOM, где находится минимум
+    _plot_loo_risk(all_loo, best_k, k_values, k_values[-1], "все k", "loo_risk_all.png")
+    _plot_loo_risk(all_loo, best_k, k_values, K_ZOOM, f"k от 1 до {K_ZOOM}", "loo_risk_zoom.png")
+
+
+def _plot_loo_risk(all_loo, best_k, k_values, k_max, title, file_name):
     fig, ax = plt.subplots(figsize=(9, 4.5))
     ks = [k for k in k_values if k <= k_max]
     for method, loo_errors in all_loo.items():

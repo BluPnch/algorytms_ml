@@ -6,6 +6,9 @@ from sklearn.neighbors import KNeighborsClassifier
 
 from model import calculate_best_k
 
+# для каких k LOO своих функций сверяется со sklearn, больше брать долго
+K_CHECK = list(range(1, 51))
+
 
 # Готового окна Парзена переменной ширины в sklearn нет. Можно через KNeighborsClassifier
 def sklearn_parzen_weights(dists):
@@ -30,20 +33,20 @@ SKLEARN_MODELS = {
 }
 
 
-def run_sklearn_baseline(X_train, y_train, X_test, k_check):
+def run_sklearn_baseline(X_train, y_train, X_test):
     results = {}
     for name in SKLEARN_MODELS:
         make_model = SKLEARN_MODELS[name]
 
         # в LOO обучаемся на всех объектах, кроме одного
         loo_errors = []
-        for k in k_check:
+        for k in K_CHECK:
             model = make_model(k, len(X_train) - 1)
             accuracy = cross_val_score(model, X_train, y_train, cv=LeaveOneOut(), n_jobs=-1).mean()
             loo_errors.append(1 - accuracy)
 
         # k выбирается тем же правилом, что и для своих моделей
-        best_k = calculate_best_k(k_check, loo_errors)
+        best_k = calculate_best_k(K_CHECK, loo_errors)
         model = make_model(best_k, len(X_train))
         model.fit(X_train, y_train)
         results[name] = {"loo": np.array(loo_errors), "k": best_k, "pred": model.predict(X_test)}

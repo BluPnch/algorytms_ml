@@ -10,5 +10,3 @@ __pycache__/
 *.ipynb
 source/explanations.md
 
-# графики с --n строятся для экспериментов, в отчет не идут
-images/*_n[0-9]*.png
