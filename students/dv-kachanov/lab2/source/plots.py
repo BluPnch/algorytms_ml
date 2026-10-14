@@ -3,13 +3,13 @@ import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 
 
-def plot_loo_risks(k_values, risks, best_k, output_path):
+def plot_LOO(k_values, LOOs, k_star, output_path):
     plt.figure(figsize=(9, 5))
-    plt.plot(k_values, risks, marker="o", label="LOO(k, X^ell)")
-    plt.axvline(best_k, linestyle="--", label=f"best k = {best_k}")
+    plt.plot(k_values, LOOs, marker="o", label="LOO(k, X^l)")
+    plt.axvline(k_star, linestyle="--", label=f"k* = {k_star}")
     plt.xlabel("Число соседей k")
-    plt.ylabel("Эмпирический риск LOO")
-    plt.title("Подбор k методом скользящего контроля")
+    plt.ylabel("LOO(k, X^l) --- число ошибок (сумма)")
+    plt.title("Подбор k методом скользящего контроля LOO(k, X^l)")
     plt.grid()
     plt.legend()
     plt.tight_layout()
@@ -17,14 +17,14 @@ def plot_loo_risks(k_values, risks, best_k, output_path):
     plt.close()
 
 
-def plot_prototypes(X, y, prototype_indices, output_path):
+def plot_prototypes(X_L, y_L, Omega, output_path):
     pca = PCA(n_components=2, random_state=42)
-    points = pca.fit_transform(X)
+    points = pca.fit_transform(X_L)
 
     plt.figure(figsize=(9, 6))
 
-    for label in np.unique(y):
-        mask = y == label
+    for label in np.unique(y_L):
+        mask = y_L == label
         plt.scatter(
             points[mask, 0],
             points[mask, 1],
@@ -33,7 +33,7 @@ def plot_prototypes(X, y, prototype_indices, output_path):
             label=f"Класс {label}"
         )
 
-    prototype_points = points[prototype_indices]
+    prototype_points = points[np.asarray(Omega)]
     plt.scatter(
         prototype_points[:, 0],
         prototype_points[:, 1],
@@ -41,12 +41,12 @@ def plot_prototypes(X, y, prototype_indices, output_path):
         facecolors="none",
         edgecolors="black",
         linewidths=1.8,
-        label="Эталоны"
+        label="Эталоны Omega"
     )
 
     plt.xlabel("Первая главная компонента")
     plt.ylabel("Вторая главная компонента")
-    plt.title("Отбор эталонных объектов")
+    plt.title("Отбор эталонов Omega (PCA-проекция X^L)")
     plt.grid()
     plt.legend()
     plt.tight_layout()
@@ -62,7 +62,7 @@ def plot_metric_comparison(names, values, output_path):
     plt.xticks(x, names, rotation=15)
     plt.ylim(0.0, 1.0)
     plt.ylabel("Accuracy")
-    plt.title("Сравнение качества KNN")
+    plt.title("Сравнение качества: a(x; X^l, k, K), 1NN на Omega, эталон")
     plt.grid(axis="y")
     plt.legend()
     plt.tight_layout()
