@@ -81,21 +81,48 @@ class DualSVM:
         raise ValueError("Неизвестное ядро")
 
     def _compute_w0(self, K):
-        if np.any(self.margin_mask):
-            indices = np.flatnonzero(self.margin_mask)
-        else:
-            indices = np.flatnonzero(self.support_mask)
-
-        values = []
-        for index in indices:
-            decision_without_w0 = np.sum(
-                self.lambdas
-                * self.y_train
-                * K[index]
+        support_indices = np.flatnonzero(self.support_mask)
+        if support_indices.size == 0:
+            raise RuntimeError(
+                "Нет опорных векторов (все lambda_i = 0): "
+                "w0 по лекции не определён"
             )
-            values.append(decision_without_w0 - self.y_train[index])
 
-        return float(np.mean(values))
+        candidates = {}
+        for index in support_indices:
+            decision_without_w0 = float(
+                np.sum(self.lambdas * self.y_train * K[index])
+            )
+            candidates[int(index)] = decision_without_w0 - float(
+                self.y_train[index]
+            )
+
+        boundary_indices = np.flatnonzero(self.margin_mask)
+        if boundary_indices.size == 0:
+            raise RuntimeError(
+                "Нет объектов с lambda_i > 0, M_i = 1 "
+                "(множество 0 < lambda_i < C пусто): "
+                "w0 = <w, x_i> - y_i по лекции не определён"
+            )
+        w0_initial = float(
+            np.mean([candidates[int(i)] for i in boundary_indices])
+        )
+
+        lecture_indices = []
+        for index in support_indices:
+            margin = float(self.y_train[index]) * (
+                float(np.sum(self.lambdas * self.y_train * K[index]))
+                - w0_initial
+            )
+            if abs(margin - 1.0) <= 1e-3:
+                lecture_indices.append(int(index))
+        if len(lecture_indices) == 0:
+            raise RuntimeError(
+                "Нет объектов с lambda_i > 0, M_i = 1: "
+                "w0 = <w, x_i> - y_i по лекции не определён"
+            )
+
+        return float(np.mean([candidates[i] for i in lecture_indices]))
 
     def margins(self, X, y):
         return np.asarray(y, dtype=float) * self.decision_function(X)

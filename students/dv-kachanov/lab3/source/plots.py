@@ -15,7 +15,8 @@ def plot_decision_boundary(model, X, y, output_path, title):
 
     plt.figure(figsize=(8, 6))
     plt.contourf(xx, yy, values, levels=25, cmap="coolwarm", alpha=0.25)
-    plt.contour(xx, yy, values, levels=[-1, 0, 1], colors=["gray", "black", "gray"], linestyles=["--", "-", "--"])
+    boundary = plt.contour(xx, yy, values, levels=[-1, 0, 1], colors=["gray", "black", "gray"], linestyles=["--", "-", "--"])
+    plt.clabel(boundary, fmt={-1: "f(x)=-1", 0: "f(x)=0", 1: "f(x)=1"})
 
     for label, marker in [(-1.0, "o"), (1.0, "s")]:
         mask = y == label
@@ -53,7 +54,7 @@ def plot_margins(margins, output_path):
     plt.figure(figsize=(8, 5))
     plt.plot(sorted_margins, label="M_i(w, w0)")
     plt.axhline(0, linestyle="--", label="Граница ошибки")
-    plt.axhline(1, linestyle="--", label="M = 1")
+    plt.axhline(1, linestyle="--", label="f(x) = 1")
     plt.xlabel("Объекты")
     plt.ylabel("Отступ")
     plt.title("Отступы тестовых объектов")
