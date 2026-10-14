@@ -1,145 +1,89 @@
-import numpy as np
+from pathlib import Path
+
+import report
 from data_preprocessing import prepare_data
+from model import calculate_loo, calculate_best_k, calculate_predict, calculate_margin, calculate_start_omega, greedy_addition
+from report import (evaluate, find_errors, print_loo, print_metrics, print_matrices, print_sklearn_check, print_prototypes,
+                    plot_loo_risk, plot_prototype_map, plot_ccv_history)
+from sklearn_baseline import run_sklearn_baseline
 
-# X уже стандартизованы, y — номера видов 0/1/2
+# графики для README
+report.SAVE_DIR = Path(__file__).parent.parent / "images"
+
 X_train, X_test, y_train, y_test, feature_names, class_names = prepare_data()
+n_classes = len(class_names)
 
 
-def calculate_knn(X, y, u, k):
-    #эвклидово расстояние
-    square = np.square(u-X)
-    sum_square = np.sum(square, axis=1)
-    dist_ux = np.sqrt(sum_square)
-    nearest_idx = np.argsort(dist_ux)
-    shear = nearest_idx[0:k]
-    shear_y = y[shear]
-    classes, counts = np.unique(shear_y, return_counts=True)
-    index_max = np.argmax(counts)
-    return classes[index_max]
+# k_values – какие k перебираются в LOO, окну Парзена нужен (k+1)-й сосед среди l-1 объектов, поэтому k не больше l-2
+# k_zoom – до какого k рисуется второй, увеличенный график LOO
+# k_check – для каких k LOO своих функций сверяется со sklearn
+# n_prototypes – сколько эталонов оставить, None – все, что отобрал жадный алгоритм
+k_values = list(range(1, len(X_train) - 1))
+k_zoom = 50
+k_check = list(range(1, 51))
+n_prototypes = None
+methods = ["knn", "parzen", "parzen_lecture"]
+
+SHOW_PLOTS = True
+RUN_SKLEARN = True
 
 
-def calculate_parzen(X, y, u, k):
-    square = np.square(u - X)
-    sum_square = np.sum(square, axis=1)
-    dist_ux = np.sqrt(sum_square)
-    nearest_idx = np.argsort(dist_ux)
-    h = dist_ux[nearest_idx[k]]
-    shear = nearest_idx[0:k]
-    shear_y = y[shear]
-    p = dist_ux[shear]
-    w = np.exp(-2 * (p / h) ** 2)
-    sums_per_class = np.bincount(shear_y, weights=w, minlength=(y.max() + 1))
-    pred = np.argmax(sums_per_class)
-    return pred, sums_per_class
+# 3, 4 – подбор k по LOO на train
+print("Подбор k по LOO ...")
+all_loo = {}
+best_k = {}
+for method in methods:
+    all_loo[method] = calculate_loo(X_train, y_train, k_values, method)
+    best_k[method] = calculate_best_k(k_values, all_loo[method])
+print_loo(all_loo, best_k, k_values, len(X_train))
 
-def calculate_parzen_lecture(X, y, u, k):
-    square = np.square(u - X)
-    sum_square = np.sum(square, axis=1)
-    dist_ux = np.sqrt(sum_square)
-    nearest_idx = np.argsort(dist_ux)
-    h = dist_ux[nearest_idx[k]]
-    p = dist_ux
-    w = np.exp(-2 * (p / h) ** 2)
-    sums_per_class = np.bincount(y, weights=w, minlength=(y.max() + 1))
-    pred = np.argmax(sums_per_class)
-    return pred, sums_per_class
-
-def calculate_loo(X, y, k_values, method):
-    loss = []
-    for k in k_values:
-        count_loss = 0
-        for i in range(0, len(X)):
-            X_k = X.copy()
-            y_k = y.copy()
-            u = X_k[i]
-            y_i = y_k[i]
-            X_k = np.delete(X_k, i , 0)
-            y_k = np.delete(y_k, i, 0)
-            if method == "knn":
-                pred = calculate_knn(X_k, y_k, u, k)
-            elif method == "parzen":
-                pred, _ = calculate_parzen(X_k, y_k, u, k)
-            elif method == "parzen_lecture":
-                pred, _ = calculate_parzen_lecture(X_k, y_k, u, k)
-            else:
-                raise ValueError("method должен быть 'knn', 'parzen' или 'parzen_lecture'")
-            if pred != y_i:
-                count_loss += 1
-        loss.append(count_loss/len(X))
-    return loss
+if SHOW_PLOTS:
+    plot_loo_risk(all_loo, best_k, k_values, k_values[-1], "все k", "loo_risk_all.png")
+    plot_loo_risk(all_loo, best_k, k_values, k_zoom, f"k от 1 до {k_zoom}", "loo_risk_zoom.png")
 
 
-X = np.array([[1.0, 1.2], [2.3, 0.9], [1.4, 2.1], [2.6, 2.8],
-              [6.1, 5.3], [5.7, 6.4], [7.2, 5.1]])
-y = np.array([0, 0, 1, 1, 1, 1, 0])
-k_values = [4, 1, 2]
+# 5 – качество на test с лучшим k
+test_rows = []
+for method in methods:
+    pred_labels = calculate_predict(X_train, y_train, X_test, best_k[method], method)
+    test_rows.append(("своя", report.SHORT_NAMES[method], best_k[method], evaluate(y_test, pred_labels, n_classes)))
+
+# 5 – эталон sklearn
+if RUN_SKLEARN:
+    print("Сравнение со sklearn ...")
+    sklearn_results = run_sklearn_baseline(X_train, y_train, X_test, k_check)
+    print_sklearn_check(all_loo, sklearn_results, k_check)
+    for name in sklearn_results:
+        result = sklearn_results[name]
+        test_rows.append(("sklearn", report.SHORT_NAMES[name], result["k"], evaluate(y_test, result["pred"], n_classes)))
+
+print_metrics("Качество на test", test_rows, len(X_test))
+print_matrices(test_rows, class_names)
 
 
+# 6 – отбор эталонов, старт по отступу окна Парзена с его лучшим k
+print("Отбор эталонов ...")
+margins = calculate_margin(X_train, y_train, best_k["parzen"])
+start_idx = calculate_start_omega(margins, y_train)
+omega_idx, history = greedy_addition(X_train, y_train, start_idx)
+if n_prototypes is not None:
+    omega_idx = omega_idx[:n_prototypes]
+    history = history[:n_prototypes - len(start_idx) + 1]
+print_prototypes(start_idx, omega_idx, history, y_train, class_names)
 
-def calculate_margin(X, y, k):
-    margin = []
-    for i in range(0, len(X)):
-        X_k = X.copy()
-        y_k = y.copy()
-        u = X_k[i]
-        y_i = y_k[i]
-        X_k = np.delete(X_k, i, 0)
-        y_k = np.delete(y_k, i, 0)
-        pred, sums = calculate_parzen(X_k, y_k, u, k)
-        new_sums = np.delete(sums, y_i, 0)
-        margin.append(sums[y_i]-np.max(new_sums))
-    return np.array(margin)
-
-
-def calculate_start_omega(margin, y):
-    indexes = []
-    for c in np.unique(y):
-        ind = np.flatnonzero(y == c)
-        best_ind = np.argmax(margin[ind])
-        indexes.append(ind[best_ind])
-    return np.array(indexes)
+# 7 – визуализация, графики с n_prototypes сохраняются отдельно и в README не идут
+if SHOW_PLOTS:
+    suffix = "" if n_prototypes is None else f"_n{n_prototypes}"
+    errors_idx = find_errors(X_train, y_train, omega_idx)
+    plot_prototype_map(X_train, y_train, omega_idx, len(start_idx), errors_idx, class_names, f"prototypes_map{suffix}.png")
+    plot_ccv_history(history, len(start_idx), len(X_train), f"prototypes_ccv{suffix}.png")
 
 
-def calculate_ccv(X, y, omega_ind):
-    err = 0
-    for i in range(0, len(X)):
-        rest = omega_ind[omega_ind != i]
-        res = calculate_knn(X[rest], y[rest], X[i], 1)
-        if (res != y[i]):
-            err += 1
-    return err / len(X)
-
-
-def greedy_addition(X, y, omega_ind):
-    history = []
-    res = calculate_ccv(X, y, omega_ind)
-    for i in range(len(X)):
-        candidates_cvv = []
-        other_ind = np.setdiff1d(np.arange(len(X)), omega_ind)
-        for ind in other_ind:
-            candidate = np.append(omega_ind, ind)
-            res_new = calculate_ccv(X, y, candidate)
-            candidates_cvv.append(res_new)
-                # if (res > np.argmin(candidate)):
-                #     res = np.argmin(candidates_cvv)
-                #     history.append(res)
-                # else:
-                #     break
-
-
-
-
-
-
-
-
-    return omega_ind, history
-
-
-
-margin = calculate_margin(X, y, 4)
-omega_ind = calculate_start_omega(margin, y)
-print(np.arange(len(X)))
-print(omega_ind)
-omega = calculate_ccv(X, y, omega_ind)
-print(omega)
+# 8 – 1NN с отбором эталонов и без
+pred_full = calculate_predict(X_train, y_train, X_test, 1, "knn")
+pred_omega = calculate_predict(X_train[omega_idx], y_train[omega_idx], X_test, 1, "knn")
+compare_rows = [
+    ("своя", f"1NN, вся выборка ({len(X_train)})", 1, evaluate(y_test, pred_full, n_classes)),
+    ("своя", f"1NN, эталоны ({len(omega_idx)})", 1, evaluate(y_test, pred_omega, n_classes)),
+]
+print_metrics("1NN с отбором эталонов и без", compare_rows, len(X_test))
