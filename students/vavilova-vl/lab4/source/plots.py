@@ -33,15 +33,13 @@ def _save(fig, path: Path) -> None:
 
 
 def spectrum(eigenvalues: np.ndarray, E: np.ndarray, eps: float, m_eff: int, path: Path) -> None:
-    """Слева — собственные значения, справа — доля потерянной дисперсии E_m."""
+    """Слева — спектр FᵀF, справа — доля потерянной дисперсии E_m."""
     n = len(eigenvalues)
     ks = np.arange(1, n + 1)
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4))
 
     ax1.bar(ks, eigenvalues, color=BLUE, width=0.6)
-    ax1.axhline(eigenvalues.mean(), color=MUTED, ls="--", lw=1, label="среднее λ (Кайзер)")
-    ax1.set(xlabel="номер компоненты j", ylabel="λ_j", title="Спектр ковариационной матрицы", xticks=ks)
-    ax1.legend(frameon=False)
+    ax1.set(xlabel="номер компоненты j", ylabel="λ_j", title="Собственные значения FᵀF", xticks=ks)
 
     ms = np.arange(0, n + 1)
     ax2.plot(ms, E, color=BLUE, marker="o", ms=6)
@@ -69,7 +67,7 @@ def loadings(components: np.ndarray, feature_names: list[str], path: Path) -> No
     im = ax.imshow(components.T, cmap="RdBu_r", vmin=-lim, vmax=lim, aspect="auto")
     ax.set(xticks=range(n), xticklabels=[f"PC{j + 1}" for j in range(n)],
            yticks=range(len(feature_names)), yticklabels=feature_names,
-           title="Главные направления (столбцы V)")
+           title="Главные направления (столбцы U)")
     ax.grid(False)
     for i in range(components.shape[1]):
         for j in range(n):

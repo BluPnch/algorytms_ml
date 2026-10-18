@@ -1,4 +1,4 @@
-"""Сравнение собственной реализации PCA с sklearn.decomposition.PCA."""
+"""Проверки реализации: основная теорема PCA и сравнение с sklearn.decomposition.PCA."""
 
 from dataclasses import dataclass
 
@@ -61,3 +61,34 @@ def reconstruction_errors(X: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         s = SklearnPCA(n_components=m, svd_solver="full").fit(X)
         ref[m - 1] = np.sum((X - s.inverse_transform(s.transform(X))) ** 2) / total
     return ours, ref
+
+
+@dataclass
+class TheoremCheck:
+    n_components: int
+    orthonormal_u: float       # max |UᵀU − I_m|
+    orthogonal_g: float        # max |GᵀG − Λ| / λ_1
+    eigen_u: float             # max |FᵀF U − U Λ| / λ_1
+    residual: float            # |‖GUᵀ − F‖² − Σ_{j>m} λ_j| / ‖F‖²
+
+    @property
+    def max_error(self) -> float:
+        return max(self.orthonormal_u, self.orthogonal_g, self.eigen_u, self.residual)
+
+
+def check_theorem(X: np.ndarray, n_components: int) -> TheoremCheck:
+    """Свойства 1–4 основной теоремы PCA (лекция 4, слайд 21) для центрированной F."""
+    pca = PCA(n_components).fit(X)
+    F = X - pca.mean_
+    U = pca.components_.T
+    G = pca.transform(X)
+    lam = pca.eigenvalues_
+    scale = pca.all_eigenvalues_[0]
+    total = np.sum(F ** 2)
+    return TheoremCheck(
+        n_components=n_components,
+        orthonormal_u=_max_abs(U.T @ U, np.eye(n_components)),
+        orthogonal_g=_max_abs(G.T @ G, np.diag(lam)) / scale,
+        eigen_u=_max_abs(F.T @ F @ U, U * lam) / scale,
+        residual=abs(np.sum((G @ U.T - F) ** 2) - pca.all_eigenvalues_[n_components:].sum()) / total,
+    )
