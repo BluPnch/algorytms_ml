@@ -29,10 +29,13 @@ M_sample = y[sample_idx] * (X[sample_idx] @ w)
 Q = np.mean((1 - M_sample) ** 2)
 
 max_iter = 10000
+eps = 1e-8
 
 for _ in range(max_iter):
-    i = np.random.randint(X.shape[0])
-    M[i] = y[i] * (X[i, :] @ w)
+    M = y * (X @ w)
+    sample_weights = 1 / (np.abs(M) + eps)
+    probabilities = sample_weights / np.sum(sample_weights)
+    i = np.random.choice(X.shape[0], p=probabilities)
     loss_i = (1 - M[i]) ** 2
     grad_L[i] = -2 * (1 - M[i]) * y[i] * X[i]
     h_star = 1 / (2 * X[i] @ X[i])
