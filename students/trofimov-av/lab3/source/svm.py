@@ -36,20 +36,23 @@ def solve_dual(x, y, c=1.0, kernel="linear", gamma=1.0):
     return result.x
 
 
-class LinearSVM:
-    def __init__(self, c=1.0):
+class KernelSVM:
+    def __init__(self, c=1.0, kernel="linear", gamma=0.25):
         self.c = c
+        self.kernel = kernel
+        self.gamma = gamma
 
     def fit(self, x, y):
         x = np.asarray(x, dtype=float)
         y = np.asarray(y, dtype=float)
-        self.alpha = solve_dual(x, y, c=self.c)
-        self.weights = (self.alpha * y) @ x
+        self.alpha = solve_dual(x, y, c=self.c, kernel=self.kernel, gamma=self.gamma)
 
         tolerance = min(1e-6, self.c * 1e-3)
         self.support = np.flatnonzero(self.alpha > tolerance)
+        self.support_vectors = x[self.support]
+        self.dual_coef = self.alpha[self.support] * y[self.support]
         free = (self.alpha > tolerance) & (self.alpha < self.c - tolerance)
-        residuals = y - x @ self.weights
+        residuals = y - kernel_matrix(x, self.support_vectors, self.kernel, self.gamma) @ self.dual_coef
 
         if np.any(free):
             self.bias = residuals[free].mean()
@@ -64,7 +67,20 @@ class LinearSVM:
         return self
 
     def decision_function(self, x):
-        return np.asarray(x, dtype=float) @ self.weights + self.bias
+        return kernel_matrix(x, self.support_vectors, self.kernel, self.gamma) @ self.dual_coef + self.bias
 
     def predict(self, x):
         return np.where(self.decision_function(x) >= 0, 1, -1)
+
+
+class LinearSVM(KernelSVM):
+    def __init__(self, c=1.0):
+        super().__init__(c=c, kernel="linear")
+
+    def fit(self, x, y):
+        super().fit(x, y)
+        self.weights = self.dual_coef @ self.support_vectors
+        return self
+
+    def decision_function(self, x):
+        return np.asarray(x, dtype=float) @ self.weights + self.bias

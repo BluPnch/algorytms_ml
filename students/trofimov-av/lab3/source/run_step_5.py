@@ -9,14 +9,11 @@ import numpy as np
 from matplotlib.lines import Line2D
 
 from data import load_iris_split
-from svm import LinearSVM
+from svm import KernelSVM
 
 
-def main():
-    x_train, x_test, y_train, y_test = load_iris_split()
-    x_train = x_train[:, 2:4]
-    x_test = x_test[:, 2:4]
-    model = LinearSVM(c=1.0).fit(x_train, y_train)
+def plot_model(x_train, x_test, y_train, y_test, kernel):
+    model = KernelSVM(c=1.0, kernel=kernel, gamma=0.25).fit(x_train, y_train)
 
     points = np.vstack((x_train, x_test))
     low = points.min(axis=0) - 0.5
@@ -56,18 +53,25 @@ def main():
     ax.set(
         xlabel="Длина лепестка (стандартизованная)",
         ylabel="Ширина лепестка (стандартизованная)",
-        title="Линейный SVM на двух признаках Iris, C = 1",
+        title=("Линейный SVM" if kernel == "linear" else "RBF SVM, γ = 0.25")
+        + " на двух признаках Iris, C = 1",
         xlim=(low[0], high[0]), ylim=(low[1], high[1]),
     )
     fig.tight_layout()
 
-    path = Path(__file__).resolve().parents[1] / "figures" / "linear_svm.png"
+    path = Path(__file__).resolve().parents[1] / "figures" / f"{kernel}_svm.png"
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=150)
     plt.close(fig)
     print(f"График сохранён: {path.name}")
     print(f"Опорных векторов: {len(model.support)}")
     print(f"Accuracy на двух признаках: {np.mean(model.predict(x_test) == y_test):.2%}")
+
+
+def main():
+    x_train, x_test, y_train, y_test = load_iris_split()
+    for kernel in ("linear", "rbf"):
+        plot_model(x_train[:, 2:4], x_test[:, 2:4], y_train, y_test, kernel)
 
 
 if __name__ == "__main__":
