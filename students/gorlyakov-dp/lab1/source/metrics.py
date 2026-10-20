@@ -33,3 +33,14 @@ def f1_score(y_true, y_pred):
         return 0.0
 
     return 2 * precision * recall / (precision + recall)
+
+
+def evaluate_model(name, X, y, w):
+    y_pred = np.sign(np.dot(X, w))
+    return {
+        "model": name,
+        "accuracy": accuracy_score(y, y_pred),
+        "precision": precision_score(y, y_pred),
+        "recall": recall_score(y, y_pred),
+        "f1": f1_score(y, y_pred),
+    }
