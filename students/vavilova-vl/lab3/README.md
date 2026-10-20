@@ -8,7 +8,7 @@
 
 ## Данные
 
-Используется датасет Titanic (`source/Titanic-Dataset.csv`, 891 пассажир). Задача — бинарная классификация: выжил пассажир или нет. Метки кодируются как в лекции:
+Используется датасет [Titanic Dataset](https://www.kaggle.com/datasets/yasserh/titanic-dataset) с Kaggle (`source/Titanic-Dataset.csv`, 891 пассажир). Файл в репозитории не хранится: при первом запуске [source/data_preparation.py](source/data_preparation.py) сам скачивает его через `kagglehub`, ключ Kaggle API не нужен. Задача — бинарная классификация: выжил пассажир или нет. Метки кодируются как в лекции:
 
 - погиб — $y = -1$;
 - выжил — $y = +1$.
@@ -250,7 +250,7 @@ lab3/
 │   ├── svm.py                # ядра и DualSVM: решение двойственной задачи
 │   ├── visualization.py      # графики
 │   ├── run_lab.py            # точка запуска: обучение, сравнение с sklearn, графики
-│   └── Titanic-Dataset.csv   # датасет (не хранится в репозитории)
+│   └── Titanic-Dataset.csv   # датасет (скачивается при первом запуске)
 ├── graphs/                   # графики отчёта
 └── results/                  # таблицы с метриками и весами
 ```

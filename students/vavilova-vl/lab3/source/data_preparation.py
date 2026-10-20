@@ -1,11 +1,15 @@
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+import kagglehub
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
 DATA_PATH = Path(__file__).resolve().parent / "Titanic-Dataset.csv"
+# Исходный датасет: https://www.kaggle.com/datasets/yasserh/titanic-dataset
+KAGGLE_DATASET = "yasserh/titanic-dataset"
 
 FEATURES = [
     "Pclass",
@@ -49,8 +53,21 @@ def encode_features(frame: pd.DataFrame, age_median: float, embarked_mode: str) 
     return encoded[FEATURES]
 
 
+def download_dataset(path: Path = DATA_PATH) -> Path:
+    """Скачивает CSV с Kaggle, если его ещё нет: в репозиторий *.csv не попадают.
+
+    Датасет публичный, ключ Kaggle API не нужен. kagglehub кладёт файлы
+    в свой кэш, оттуда CSV копируется рядом с кодом.
+    """
+    if not path.exists():
+        print(f"Скачиваю датасет с Kaggle: {KAGGLE_DATASET}")
+        cache_dir = Path(kagglehub.dataset_download(KAGGLE_DATASET))
+        shutil.copy(cache_dir / path.name, path)
+    return path
+
+
 def load_dataset(path: Path = DATA_PATH, test_size: float = 0.2, random_state: int = 42) -> Dataset:
-    frame = pd.read_csv(path)
+    frame = pd.read_csv(download_dataset(path))
     train_frame, test_frame = train_test_split(
         frame,
         test_size=test_size,
