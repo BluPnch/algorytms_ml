@@ -62,3 +62,28 @@ y_pred_test = np.sign(np.dot(X_test, w))
 print("Train accuracy:", np.mean(y_pred_train == y_train))
 print("Test accuracy:", np.mean(y_pred_test == y_test))
 print("Q:", Q)
+
+w_multistart = None
+Q_miltistart = None
+old_loss = np.inf
+for _ in range(10):
+    w0 = np.random.uniform(
+        -1 / (2 * X_train.shape[1]), 1 / (2 * X_train.shape[1]), size=X_train.shape[1]
+    )
+    w, Q = train_classifier(X_train, y_train, w0)
+    M_train = y_train * np.dot(X_train, w)
+    train_loss = np.mean((1 - M_train) ** 2)
+    if train_loss < old_loss:
+        old_loss = train_loss
+        w_multistart = w
+        Q_miltistart = Q
+
+w = w_multistart
+Q = Q_miltistart
+
+y_pred_train = np.sign(np.dot(X_train, w))
+y_pred_test = np.sign(np.dot(X_test, w))
+
+print("Train accuracy:", np.mean(y_pred_train == y_train))
+print("Test accuracy:", np.mean(y_pred_test == y_test))
+print("Q:", Q)
