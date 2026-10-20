@@ -1,4 +1,6 @@
 import numpy as np
+import pandas as pd
+from metrics import accuracy_score, f1_score, precision_score, recall_score
 from sklearn.datasets import load_wine
 from sklearn.model_selection import train_test_split
 
@@ -18,10 +20,10 @@ X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=30, stratify=y
 )
 
-w0 = np.empty(X_train.shape[1])
+w0_corr = np.empty(X_train.shape[1])
 
 for j in range(X_train.shape[1]):
-    w0[j] = np.dot(y_train, X_train[:, j]) / np.dot(X_train[:, j], X_train[:, j])
+    w0_corr[j] = np.dot(y_train, X_train[:, j]) / np.dot(X_train[:, j], X_train[:, j])
 
 
 def choose_random(M):
@@ -61,14 +63,21 @@ def train_classifier(X, y, w, choose_object):
     return w, Q
 
 
-w, Q = train_classifier(X_train, y_train, w0, choose_random)
+def evaluate_model(name, X, y, w):
+    y_pred = np.sign(np.dot(X, w))
+    return {
+        "model": name,
+        "accuracy": accuracy_score(y, y_pred),
+        "precision": precision_score(y, y_pred),
+        "recall": recall_score(y, y_pred),
+        "f1": f1_score(y, y_pred),
+    }
 
-y_pred_train = np.sign(np.dot(X_train, w))
-y_pred_test = np.sign(np.dot(X_test, w))
 
-print("Train accuracy:", np.mean(y_pred_train == y_train))
-print("Test accuracy:", np.mean(y_pred_test == y_test))
-print("Q:", Q)
+results = []
+
+w, Q = train_classifier(X_train, y_train, w0_corr, choose_random)
+results.append(evaluate_model("correlation + random", X_test, y_test, w))
 
 w_multistart = None
 Q_miltistart = None
@@ -87,32 +96,15 @@ for _ in range(10):
 
 w = w_multistart
 Q = Q_miltistart
-
-y_pred_train = np.sign(np.dot(X_train, w))
-y_pred_test = np.sign(np.dot(X_test, w))
-
-print("Train accuracy:", np.mean(y_pred_train == y_train))
-print("Test accuracy:", np.mean(y_pred_test == y_test))
-print("Q:", Q)
+results.append(evaluate_model("multistart + random", X_test, y_test, w))
 
 w0 = np.random.uniform(
     -1 / (2 * X_train.shape[1]), 1 / (2 * X_train.shape[1]), size=X_train.shape[1]
 )
-
 w, Q = train_classifier(X_train, y_train, w0.copy(), choose_random)
-
-y_pred_train = np.sign(np.dot(X_train, w))
-y_pred_test = np.sign(np.dot(X_test, w))
-
-print("Train accuracy:", np.mean(y_pred_train == y_train))
-print("Test accuracy:", np.mean(y_pred_test == y_test))
-print("Q:", Q)
+results.append(evaluate_model("random init + random", X_test, y_test, w))
 
 w, Q = train_classifier(X_train, y_train, w0.copy(), choose_by_margin)
+results.append(evaluate_model("random init + margin", X_test, y_test, w))
 
-y_pred_train = np.sign(np.dot(X_train, w))
-y_pred_test = np.sign(np.dot(X_test, w))
-
-print("Train accuracy:", np.mean(y_pred_train == y_train))
-print("Test accuracy:", np.mean(y_pred_test == y_test))
-print("Q:", Q)
+print(pd.DataFrame(results).to_string(index=False))
