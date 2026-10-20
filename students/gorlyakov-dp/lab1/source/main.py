@@ -2,7 +2,10 @@ import numpy as np
 import pandas as pd
 from metrics import accuracy_score, f1_score, precision_score, recall_score
 from sklearn.datasets import load_wine
+from sklearn.linear_model import RidgeClassifier
 from sklearn.model_selection import train_test_split
+
+np.random.seed(30)
 
 wine = load_wine()
 
@@ -106,5 +109,18 @@ results.append(evaluate_model("random init + random", X_test, y_test, w))
 
 w, Q = train_classifier(X_train, y_train, w0.copy(), choose_by_margin)
 results.append(evaluate_model("random init + margin", X_test, y_test, w))
+
+ridge = RidgeClassifier()
+ridge.fit(X_train, y_train)
+y_pred_ridge = ridge.predict(X_test)
+results.append(
+    {
+        "model": "RidgeClassifier",
+        "accuracy": accuracy_score(y_test, y_pred_ridge),
+        "precision": precision_score(y_test, y_pred_ridge),
+        "recall": recall_score(y_test, y_pred_ridge),
+        "f1": f1_score(y_test, y_pred_ridge),
+    }
+)
 
 print(pd.DataFrame(results).to_string(index=False))
