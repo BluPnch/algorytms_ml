@@ -24,7 +24,18 @@ for j in range(X_train.shape[1]):
     w0[j] = np.dot(y_train, X_train[:, j]) / np.dot(X_train[:, j], X_train[:, j])
 
 
-def train_classifier(X, y, w):
+def choose_random(M):
+    return np.random.choice(len(M))
+
+
+def choose_by_margin(M):
+    eps = 1e-8
+    sample_weights = 1 / (np.abs(M) + eps)
+    probabilities = sample_weights / np.sum(sample_weights)
+    return np.random.choice(len(M), p=probabilities)
+
+
+def train_classifier(X, y, w, choose_object):
     w = w.copy()
 
     M = np.empty(X.shape[0])
@@ -38,13 +49,9 @@ def train_classifier(X, y, w):
     Q = np.mean((1 - M_sample) ** 2)
 
     max_iter = 10000
-    eps = 1e-8
-
     for _ in range(max_iter):
         M = y * np.dot(X, w)
-        sample_weights = 1 / (np.abs(M) + eps)
-        probabilities = sample_weights / np.sum(sample_weights)
-        i = np.random.choice(X.shape[0], p=probabilities)
+        i = choose_object(M)
         loss_i = (1 - M[i]) ** 2
         grad_L[i] = -2 * (1 - M[i]) * y[i] * X[i]
         h_star = 1 / (2 * np.dot(X[i], X[i]))
@@ -54,7 +61,7 @@ def train_classifier(X, y, w):
     return w, Q
 
 
-w, Q = train_classifier(X_train, y_train, w0)
+w, Q = train_classifier(X_train, y_train, w0, choose_random)
 
 y_pred_train = np.sign(np.dot(X_train, w))
 y_pred_test = np.sign(np.dot(X_test, w))
@@ -70,7 +77,7 @@ for _ in range(10):
     w0 = np.random.uniform(
         -1 / (2 * X_train.shape[1]), 1 / (2 * X_train.shape[1]), size=X_train.shape[1]
     )
-    w, Q = train_classifier(X_train, y_train, w0)
+    w, Q = train_classifier(X_train, y_train, w0, choose_random)
     M_train = y_train * np.dot(X_train, w)
     train_loss = np.mean((1 - M_train) ** 2)
     if train_loss < old_loss:
@@ -80,6 +87,28 @@ for _ in range(10):
 
 w = w_multistart
 Q = Q_miltistart
+
+y_pred_train = np.sign(np.dot(X_train, w))
+y_pred_test = np.sign(np.dot(X_test, w))
+
+print("Train accuracy:", np.mean(y_pred_train == y_train))
+print("Test accuracy:", np.mean(y_pred_test == y_test))
+print("Q:", Q)
+
+w0 = np.random.uniform(
+    -1 / (2 * X_train.shape[1]), 1 / (2 * X_train.shape[1]), size=X_train.shape[1]
+)
+
+w, Q = train_classifier(X_train, y_train, w0.copy(), choose_random)
+
+y_pred_train = np.sign(np.dot(X_train, w))
+y_pred_test = np.sign(np.dot(X_test, w))
+
+print("Train accuracy:", np.mean(y_pred_train == y_train))
+print("Test accuracy:", np.mean(y_pred_test == y_test))
+print("Q:", Q)
+
+w, Q = train_classifier(X_train, y_train, w0.copy(), choose_by_margin)
 
 y_pred_train = np.sign(np.dot(X_train, w))
 y_pred_test = np.sign(np.dot(X_test, w))
