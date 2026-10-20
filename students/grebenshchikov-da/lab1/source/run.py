@@ -150,10 +150,16 @@ def train_models(data, learning_rate: float, base_model: LinearClassifier):
             random_state=RANDOM_STATE,
             **common,
         ),
-        "Скорейший градиентный спуск": LinearClassifier(l2=L2).fit_steepest(
+        "Стохастический скорейший спуск": LinearClassifier(l2=L2).fit_sgd(
             data.X_train,
             data.y_train,
             initial_weights=correlation_weights,
+            epochs=80,
+            momentum=0.0,
+            quality_rate=0.02,
+            presentation="random",
+            step_mode="steepest",
+            random_state=RANDOM_STATE,
         ),
     }
 
@@ -433,7 +439,7 @@ def plot_metric_comparison(metrics: pd.DataFrame, best_name: str) -> None:
         "Корреляция + случайный порядок": "Корреляция + случайно",
         "Мультистарт + случайный порядок": "Мультистарт + случайно",
         "Мультистарт + порядок по отступу": "Мультистарт + |M|",
-        "Скорейший градиентный спуск": "Скорейший спуск",
+        "Стохастический скорейший спуск": "Стохастический скорейший",
         "RidgeClassifier": "RidgeClassifier",
     }
     metric_labels = {

@@ -49,20 +49,20 @@ def object_gradient(
     return loss_gradient + l2 * weights * regularization_mask(len(weights))
 
 
-def full_gradient(
-    X: np.ndarray,
-    y: np.ndarray,
-    weights: np.ndarray,
+def stochastic_steepest_step(
+    x_with_bias: np.ndarray,
+    gradient: np.ndarray,
     l2: float,
-) -> np.ndarray:
-    """Усредняет градиенты всей выборки для скорейшего спуска."""
-    X_bias = add_bias(X)
-    current_margins = y * (X_bias @ weights)
-    gradient = np.mean(
-        -2.0 * (1.0 - current_margins)[:, None] * y[:, None] * X_bias,
-        axis=0,
+) -> float:
+    """Находит лучший шаг для текущего объекта и квадратичного loss"""
+    mask = regularization_mask(len(gradient))
+    denominator = (
+        2.0 * np.dot(x_with_bias, gradient) ** 2
+        + l2 * np.sum((mask * gradient) ** 2)
     )
-    return gradient + l2 * weights * regularization_mask(len(weights))
+    if denominator <= 1e-12:
+        return 0.0
+    return float(np.dot(gradient, gradient) / denominator)
 
 
 def correlation_initialization(X: np.ndarray, y: np.ndarray) -> np.ndarray:
@@ -99,9 +99,15 @@ class LinearClassifier:
         momentum: float = 0.9,
         quality_rate: float = 0.02,
         presentation: str = "random",
+        step_mode: str = "constant",
         random_state: int = 42,
     ) -> "LinearClassifier":
         """Обучает модель методом SGD с momentum и рекуррентной оценкой Q."""
+        if step_mode not in {"constant", "steepest"}:
+            raise ValueError("step_mode должен быть constant или steepest")
+        if step_mode == "steepest" and momentum != 0.0:
+            raise ValueError("Скорейший шаг используется без momentum")
+
         rng = np.random.default_rng(random_state)
         X_bias = add_bias(X)
         self.weights = initial_weights.astype(float).copy()
@@ -126,9 +132,18 @@ class LinearClassifier:
                     self.weights,
                     self.l2,
                 )
-                # Momentum сохраняет часть предыдущего направления движения.
-                velocity = momentum * velocity + gradient
-                self.weights -= learning_rate * velocity
+                if step_mode == "steepest":
+                    # Шаг минимизирует loss текущего объекта вдоль антиградиента
+                    step = stochastic_steepest_step(
+                        X_bias[index],
+                        gradient,
+                        self.l2,
+                    )
+                    self.weights -= step * gradient
+                else:
+                    # Momentum сохраняет часть предыдущего направления движения.
+                    velocity = momentum * velocity + gradient
+                    self.weights -= learning_rate * velocity
 
                 current_margin = y[index] * np.dot(X_bias[index], self.weights)
                 current_loss = float(quadratic_loss(current_margin))
@@ -137,45 +152,6 @@ class LinearClassifier:
 
             self.history["risk"].append(empirical_risk(X, y, self.weights, self.l2))
             self.history["quality"].append(quality)
-
-        return self
-
-    def fit_steepest(
-        self,
-        X: np.ndarray,
-        y: np.ndarray,
-        initial_weights: np.ndarray,
-        iterations: int = 1000,
-        tolerance: float = 1e-8,
-    ) -> "LinearClassifier":
-        """Делает шаги по полному антиградиенту с оптимальной длиной шага."""
-        X_bias = add_bias(X)
-        self.weights = initial_weights.astype(float).copy()
-        self.initial_weights = self.weights.copy()
-        self.history = {"risk": [], "quality": []}
-        initial_risk = empirical_risk(X, y, self.weights, self.l2)
-        self.history["risk"].append(initial_risk)
-        self.history["quality"].append(initial_risk)
-
-        # Для квадратичного функционала кривизна задаётся постоянной матрицей H.
-        mask = np.diag(regularization_mask(X_bias.shape[1]))
-        hessian = 2.0 * (X_bias.T @ X_bias) / len(X_bias) + self.l2 * mask
-
-        for _ in range(iterations):
-            gradient = full_gradient(X, y, self.weights, self.l2)
-            if np.linalg.norm(gradient) < tolerance:
-                break
-
-            denominator = float(gradient @ hessian @ gradient)
-            if denominator <= 0:
-                break
-
-            # Эта формула даёт лучший шаг вдоль текущего антиградиента.
-            step = float((gradient @ gradient) / denominator)
-            self.weights -= step * gradient
-            risk = empirical_risk(X, y, self.weights, self.l2)
-            self.history["risk"].append(risk)
-            self.history["quality"].append(risk)
 
         return self
 
