@@ -1,23 +1,16 @@
 import numpy as np
 import pandas as pd
 from metrics import accuracy_score, f1_score, precision_score, recall_score
-from sklearn.datasets import load_wine
+from sklearn.datasets import load_breast_cancer
 from sklearn.linear_model import RidgeClassifier
 from sklearn.model_selection import train_test_split
 
 np.random.seed(30)
 
-wine = load_wine()
+data = load_breast_cancer()
 
-X = wine.data
-y = wine.target
-
-mask = (y == 0) | (y == 1)
-
-X = X[mask]
-y = y[mask]
-
-y = np.where(y == 0, -1, 1)
+X = data.data
+y = np.where(data.target == 0, -1, 1)
 
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=30, stratify=y
