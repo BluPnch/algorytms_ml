@@ -30,7 +30,7 @@ uv run python source/main.py
 
 Скрипт печатает все таблицы из отчёта и сохраняет графики в `images/`.
 
-**Данные.** Файл `source/Titanic-Dataset.csv` в репозиторий не попадает (в корневом `.gitignore` стоит правило `*.csv`). Скачайте `train.csv` из соревнования Kaggle [Titanic - Machine Learning from Disaster](https://www.kaggle.com/c/titanic/data) и сохраните его как `source/Titanic-Dataset.csv`.
+**Данные.** Файл `source/Titanic-Dataset.csv` в репозиторий не попадает (в корневом `.gitignore` стоит правило `*.csv`). При первом запуске [source/data.py](source/data.py) сам скачивает его с Kaggle через `kagglehub` — датасет [Titanic Dataset](https://www.kaggle.com/datasets/yasserh/titanic-dataset), ключ Kaggle API не нужен. Без доступа к сети скачайте `Titanic-Dataset.csv` со страницы датасета вручную и положите в `source/`.
 
 | Файл | Назначение |
 |---|---|

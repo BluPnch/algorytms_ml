@@ -1,13 +1,17 @@
 """Загрузка Titanic и подготовка признаков для логистической регрессии."""
 
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+import kagglehub
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
 DATA_PATH = Path(__file__).resolve().parent / "Titanic-Dataset.csv"
+# Исходный датасет: https://www.kaggle.com/datasets/yasserh/titanic-dataset
+KAGGLE_DATASET = "yasserh/titanic-dataset"
 TEST_SIZE = 0.2
 SEED = 42
 
@@ -43,8 +47,16 @@ def build_features(df: pd.DataFrame, age_median: float) -> pd.DataFrame:
     })
 
 
+def download_dataset(path: Path = DATA_PATH) -> Path:
+    if not path.exists():
+        print(f"Скачиваю датасет с Kaggle: {KAGGLE_DATASET}")
+        cache_dir = Path(kagglehub.dataset_download(KAGGLE_DATASET))
+        shutil.copy(cache_dir / path.name, path)
+    return path
+
+
 def load_dataset(path: Path = DATA_PATH) -> Dataset:
-    df = pd.read_csv(path)
+    df = pd.read_csv(download_dataset(path))
     train_df, test_df = train_test_split(df, test_size=TEST_SIZE, random_state=SEED,
                                          stratify=df["Survived"])
     age_median = train_df["Age"].median()
