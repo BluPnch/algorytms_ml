@@ -2,7 +2,7 @@
 
 ## Задача и данные
 
-Датасет Titanic (`source/Titanic-Dataset.csv`, 891 пассажир). Решается бинарная классификация: выжил пассажир (`Survived=1`) или погиб (`Survived=0`). Классы несбалансированы: 549 погибших и 342 выживших, поэтому, кроме accuracy, считается F1 для класса «Выжил».
+Датасет [Titanic Dataset](https://www.kaggle.com/datasets/yasserh/titanic-dataset) с Kaggle (`source/Titanic-Dataset.csv`, 891 пассажир). Файл в репозитории не хранится: при первом запуске [source/data_preparation.py](source/data_preparation.py) сам скачивает его через `kagglehub`, ключ Kaggle API не нужен. Решается бинарная классификация: выжил пассажир (`Survived=1`) или погиб (`Survived=0`). Классы несбалансированы: 549 погибших и 342 выживших, поэтому, кроме accuracy, считается F1 для класса «Выжил».
 
 ### Признаки
 
