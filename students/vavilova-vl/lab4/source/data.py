@@ -1,12 +1,16 @@
 """Загрузка и подготовка датасета Titanic для линейной регрессии."""
 
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+import kagglehub
 import numpy as np
 import pandas as pd
 
 DATA_PATH = Path(__file__).resolve().parent / "Titanic-Dataset.csv"
+# Исходный датасет: https://www.kaggle.com/datasets/yasserh/titanic-dataset
+KAGGLE_DATASET = "yasserh/titanic-dataset"
 
 
 @dataclass
@@ -53,13 +57,26 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     })
 
 
+def download_dataset(path: Path = DATA_PATH) -> Path:
+    """Скачивает CSV с Kaggle, если его ещё нет: в репозиторий *.csv не попадают.
+
+    Датасет публичный, ключ Kaggle API не нужен. kagglehub кладёт файлы
+    в свой кэш, оттуда CSV копируется рядом с кодом.
+    """
+    if not path.exists():
+        print(f"Скачиваю датасет с Kaggle: {KAGGLE_DATASET}")
+        cache_dir = Path(kagglehub.dataset_download(KAGGLE_DATASET))
+        shutil.copy(cache_dir / path.name, path)
+    return path
+
+
 def load_dataset(path: Path = DATA_PATH) -> Dataset:
     """Titanic: 891 пассажир; цель — log(1 + Fare), стоимость билета в лог-шкале.
 
     Fare сильно скошен (медиана 14, максимум 512), логарифм делает зависимость
     ближе к линейной.
     """
-    df = pd.read_csv(path)
+    df = pd.read_csv(download_dataset(path))
     features = build_features(df)
     X = standardize(features.to_numpy(dtype=float))
     y = np.log1p(df["Fare"].to_numpy(dtype=float))

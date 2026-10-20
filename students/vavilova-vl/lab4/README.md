@@ -15,11 +15,12 @@ uv run python source/main.py
 
 Скрипт печатает все таблицы из отчёта и сохраняет графики в `images/`.
 
+**Данные.** Файл `source/Titanic-Dataset.csv` в репозиторий не попадает (в корневом `.gitignore` стоит правило `*.csv`). При первом запуске [source/data.py](source/data.py) сам скачивает его с Kaggle через `kagglehub` — датасет [Titanic Dataset](https://www.kaggle.com/datasets/yasserh/titanic-dataset), ключ Kaggle API не нужен. Без доступа к сети скачайте `Titanic-Dataset.csv` со страницы датасета вручную и положите в `source/`.
+
 ## Структура
 
 | Файл | Назначение |
 |---|---|
-| [source/Titanic-Dataset.csv](source/Titanic-Dataset.csv) | исходные данные |
 | [source/data.py](source/data.py) | загрузка, построение признаков, стандартизация |
 | [source/pca.py](source/pca.py) | класс `PCA`: `fit`, `transform`, `fit_transform`, `inverse_transform` через SVD |
 | [source/dimension.py](source/dimension.py) | $E_m$, эффективная размерность, критерий «крутого склона», число обусловленности |
