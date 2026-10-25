@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from gas_data import standardize
+from gas_data import Preprocessor
 
 
 @dataclass
@@ -77,16 +77,19 @@ def random_folds(n_objects: int, n_splits: int, n_repeats: int,
 Solver = Callable[[SVDFit], tuple[np.ndarray, float]]
 
 
-def cv_rmse(X: np.ndarray, y: np.ndarray, folds, solvers: list[Solver]) -> np.ndarray:
+def cv_rmse(X: np.ndarray, y: np.ndarray, groups: np.ndarray, folds,
+            solvers: list[Solver]) -> np.ndarray:
     """RMSE на контроле для каждого решателя.
 
-    Стандартизация и SVD строятся только по обучающей части блока; одно SVD
+    X — признаки с пропусками в исходных единицах. Заполнение пропусков,
+    стандартизация и SVD строятся только по обучающей части блока; одно SVD
     обслуживает сразу все решатели — так дешевле перебирать m и τ.
     """
     sq_errors = np.zeros(len(solvers))
     count = 0
     for train, test in folds:
-        X_train, X_test = standardize(X[train], X[test])
+        prep = Preprocessor().fit(X[train], groups[train])
+        X_train, X_test = prep.transform(X[train], groups[train]), prep.transform(X[test], groups[test])
         svd = SVDFit.fit(X_train, y[train])
         for k, solve in enumerate(solvers):
             alpha, b = solve(svd)
@@ -100,11 +103,12 @@ def bootstrap_coefficients(X: np.ndarray, y: np.ndarray, groups: np.ndarray,
                            seed: int = 0) -> np.ndarray:
     """Коэффициенты на бутстреп-выборках серий испытаний: n_boot × len(solvers) × n.
 
-    Признаки стандартизованы по всей выборке, чтобы коэффициенты разных
-    бутстреп-выборок были в одном масштабе.
+    Пропуски заполнены и признаки стандартизованы по всей выборке, чтобы
+    коэффициенты разных бутстреп-выборок были в одном масштабе. Качество
+    прогноза здесь не оценивается, поэтому утечки в оценку нет.
     """
     rng = np.random.default_rng(seed)
-    Xs = standardize(X)
+    Xs = Preprocessor().fit_transform(X, groups)
     unique = np.unique(groups)
     result = np.empty((n_boot, len(solvers), X.shape[1]))
     for b in range(n_boot):

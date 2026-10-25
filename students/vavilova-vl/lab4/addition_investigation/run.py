@@ -16,7 +16,7 @@ from sklearn.linear_model import LinearRegression, Ridge
 import gas_plots
 import plots
 from dimension import condition_number, effective_dimension, residual_variance, steep_slope_dimension
-from gas_data import load_gas_data, standardize
+from gas_data import Preprocessor, load_gas_data
 from models import (SVDFit, bootstrap_coefficients, cv_rmse, effective_dimension_ridge,
                     grouped_folds, random_folds)
 from pca import PCA
@@ -38,7 +38,7 @@ def main() -> None:
     data = load_gas_data()
     X, y, groups, names = data.X, data.y, data.groups, data.feature_names
     n_objects, n_features = data.shape
-    Xs = standardize(X)
+    Xs = Preprocessor().fit_transform(X, groups)
 
     section("Датасет")
     print(f"Строк в файле: {data.n_raw}; после очистки ℓ = {n_objects}, n = {n_features}, "
@@ -99,10 +99,10 @@ def main() -> None:
     const = [lambda s: (np.zeros(n_features), s.y_mean)]
 
     folds = lambda: grouped_folds(groups, N_SPLITS, N_REPEATS)
-    rmse_pcr = cv_rmse(X, y, folds(), pcr_solvers)
-    rmse_ridge = cv_rmse(X, y, folds(), ridge_solvers)
-    rmse_const = cv_rmse(X, y, folds(), const)[0]
-    rmse_pcr_random = cv_rmse(X, y, random_folds(n_objects, N_SPLITS, N_REPEATS), pcr_solvers)
+    rmse_pcr = cv_rmse(X, y, groups, folds(), pcr_solvers)
+    rmse_ridge = cv_rmse(X, y, groups, folds(), ridge_solvers)
+    rmse_const = cv_rmse(X, y, groups, folds(), const)[0]
+    rmse_pcr_random = cv_rmse(X, y, groups, random_folds(n_objects, N_SPLITS, N_REPEATS), pcr_solvers)
 
     print(f"Константа ȳ: RMSE = {rmse_const:.2f}")
     print(f"{'m':>3} {'по сериям':>10} {'по замерам':>11}")

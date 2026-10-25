@@ -3,6 +3,7 @@
 import numpy as np
 from sklearn.model_selection import RepeatedKFold
 
+from data import Preprocessor
 from pca import PCA
 
 
@@ -22,12 +23,17 @@ def pcr_fit(X: np.ndarray, y: np.ndarray, m: int) -> tuple[np.ndarray, float]:
 
 def pcr_cv_rmse(X: np.ndarray, y: np.ndarray, m: int,
                 n_splits: int = 5, n_repeats: int = 10, seed: int = 0) -> float:
-    """RMSE на t×q-fold CV; PCA обучается только на обучающей части каждого блока."""
+    """RMSE на t×q-fold CV.
+
+    X — признаки с пропусками, без стандартизации. Заполнение пропусков,
+    стандартизация и PCA обучаются только на обучающей части каждого блока.
+    """
     folds = RepeatedKFold(n_splits=n_splits, n_repeats=n_repeats, random_state=seed)
     errors = []
     for train, test in folds.split(X):
-        alpha, b = pcr_fit(X[train], y[train], m)
-        errors.append(np.mean((y[test] - (X[test] @ alpha + b)) ** 2))
+        prep = Preprocessor().fit(X[train])
+        alpha, b = pcr_fit(prep.transform(X[train]), y[train], m)
+        errors.append(np.mean((y[test] - (prep.transform(X[test]) @ alpha + b)) ** 2))
     return float(np.sqrt(np.mean(errors)))
 
 

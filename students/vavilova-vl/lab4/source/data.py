@@ -15,7 +15,7 @@ KAGGLE_DATASET = "yasserh/titanic-dataset"
 
 @dataclass
 class Dataset:
-    X: np.ndarray            # матрица «объекты–признаки», ℓ × n
+    X: np.ndarray            # матрица «объекты–признаки», ℓ × n; пропуски — NaN
     y: np.ndarray            # целевая переменная, ℓ
     feature_names: list[str]
 
@@ -24,35 +24,42 @@ class Dataset:
         return self.X.shape
 
 
-def standardize(X: np.ndarray) -> np.ndarray:
-    """Приводит каждый признак к нулевому среднему и единичной дисперсии.
+class Preprocessor:
+    """Заполнение пропусков медианой и стандартизация."""
 
-    Без стандартизации главные компоненты определялись бы масштабом признаков,
-    а не их связью друг с другом.
-    """
-    mean = X.mean(axis=0)
-    std = X.std(axis=0)
-    std[std == 0] = 1.0
-    return (X - mean) / std
+    def fit(self, X: np.ndarray) -> "Preprocessor":
+        self.median_ = np.nanmedian(X, axis=0)
+        X = self._impute(X)
+        self.mean_ = X.mean(axis=0)
+        self.std_ = X.std(axis=0)
+        self.std_[self.std_ == 0] = 1.0
+        return self
+
+    def transform(self, X: np.ndarray) -> np.ndarray:
+        return (self._impute(X) - self.mean_) / self.std_
+
+    def fit_transform(self, X: np.ndarray) -> np.ndarray:
+        return self.fit(X).transform(X)
+
+    def _impute(self, X: np.ndarray) -> np.ndarray:
+        return np.where(np.isnan(X), self.median_, X)
 
 
 def build_features(df: pd.DataFrame) -> pd.DataFrame:
     """Числовые признаки пассажира.
 
-    Age пропущен у 177 пассажиров — заполняем медианой; Embarked пропущен у двух —
-    самым частым портом S. Порт кодируется двумя индикаторами (S — базовый),
-    иначе сумма трёх индикаторов давала бы точную линейную зависимость.
     """
-    embarked = df["Embarked"].fillna("S")
+    embarked = df["Embarked"]
+    missing_port = embarked.isna()
     return pd.DataFrame({
         "Pclass": df["Pclass"],
         "Sex": (df["Sex"] == "female").astype(float),
-        "Age": df["Age"].fillna(df["Age"].median()),
+        "Age": df["Age"],
         "SibSp": df["SibSp"],
         "Parch": df["Parch"],
         "HasCabin": df["Cabin"].notna().astype(float),
-        "Embarked_C": (embarked == "C").astype(float),
-        "Embarked_Q": (embarked == "Q").astype(float),
+        "Embarked_C": (embarked == "C").astype(float).mask(missing_port),
+        "Embarked_Q": (embarked == "Q").astype(float).mask(missing_port),
         "Survived": df["Survived"],
     })
 
@@ -74,10 +81,11 @@ def load_dataset(path: Path = DATA_PATH) -> Dataset:
     """Titanic: 891 пассажир; цель — log(1 + Fare), стоимость билета в лог-шкале.
 
     Fare сильно скошен (медиана 14, максимум 512), логарифм делает зависимость
-    ближе к линейной.
+    ближе к линейной. Признаки возвращаются без заполнения пропусков и без
+    стандартизации — см. Preprocessor.
     """
     df = pd.read_csv(download_dataset(path))
     features = build_features(df)
-    X = standardize(features.to_numpy(dtype=float))
+    X = features.to_numpy(dtype=float)
     y = np.log1p(df["Fare"].to_numpy(dtype=float))
     return Dataset(X=X, y=y, feature_names=list(features.columns))

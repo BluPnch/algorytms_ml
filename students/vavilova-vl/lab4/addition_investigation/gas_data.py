@@ -1,5 +1,6 @@
 """Загрузка и очистка данных газоконденсатных испытаний скважин."""
 
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -32,7 +33,7 @@ FEATURES = {
 
 @dataclass
 class GasData:
-    X: np.ndarray            # ℓ × n, признаки в исходных единицах (без стандартизации)
+    X: np.ndarray            # ℓ × n, признаки в исходных единицах; пропуски — NaN
     y: np.ndarray            # дебит газа, тыс. м³/сут
     groups: np.ndarray       # номер серии испытаний: режимы одной скважины
     feature_names: list[str]
@@ -70,12 +71,10 @@ def load_gas_data(path: Path = DATA_PATH) -> GasData:
     fixes.append(f"Рлин(кон), отличающееся от Рлин(ср) больше чем на 30 атм ({int(bad_line.sum())} шт.), "
                  "заменено на Рлин(ср)")
 
-    # Остальные пропуски — медианой своей серии, а если в серии значения нет совсем — общей медианой.
+    # Остальные пропуски заполняет Preprocessor по обучающей выборке.
     features = df[list(FEATURES)]
     n_missing = int(features.isna().sum().sum())
-    features = features.groupby(groups).transform(lambda s: s.fillna(s.median()))
-    features = features.fillna(features.median())
-    fixes.append(f"{n_missing} пропусков заполнено медианой серии испытаний (или общей медианой)")
+    fixes.append(f"{n_missing} пропуска остаются NaN и заполняются по обучающей выборке")
 
     return GasData(
         X=features.to_numpy(dtype=float),
@@ -87,10 +86,29 @@ def load_gas_data(path: Path = DATA_PATH) -> GasData:
     )
 
 
-def standardize(X_train: np.ndarray, X_test: np.ndarray | None = None):
-    """Стандартизация по статистикам обучающей части."""
-    mean, std = X_train.mean(axis=0), X_train.std(axis=0)
-    std[std == 0] = 1.0
-    if X_test is None:
-        return (X_train - mean) / std
-    return (X_train - mean) / std, (X_test - mean) / std
+class Preprocessor:
+    """Заполнение пропусков и стандартизация по статистикам обучающей выборки."""
+
+    def fit(self, X: np.ndarray, groups: np.ndarray) -> "Preprocessor":
+        self.median_ = np.nanmedian(X, axis=0)
+        # Если в серии нет ни одного значения признака, её медиана — NaN, и берётся общая.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            self.group_median_ = {g: np.nanmedian(X[groups == g], axis=0) for g in np.unique(groups)}
+        X = self._impute(X, groups)
+        self.mean_, self.std_ = X.mean(axis=0), X.std(axis=0)
+        self.std_[self.std_ == 0] = 1.0
+        return self
+
+    def transform(self, X: np.ndarray, groups: np.ndarray) -> np.ndarray:
+        return (self._impute(X, groups) - self.mean_) / self.std_
+
+    def fit_transform(self, X: np.ndarray, groups: np.ndarray) -> np.ndarray:
+        return self.fit(X, groups).transform(X, groups)
+
+    def _impute(self, X: np.ndarray, groups: np.ndarray) -> np.ndarray:
+        X = X.copy()
+        for i, j in zip(*np.nonzero(np.isnan(X))):
+            value = self.group_median_.get(groups[i], self.median_)[j]
+            X[i, j] = self.median_[j] if np.isnan(value) else value
+        return X

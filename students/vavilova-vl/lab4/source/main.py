@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 
 import plots
-from data import load_dataset
+from data import Preprocessor, load_dataset
 from dimension import condition_number, effective_dimension, residual_variance, steep_slope_dimension
 from pca import PCA
 from reference import check_theorem, compare, reconstruction_errors
@@ -26,7 +26,7 @@ def section(title: str) -> None:
 def main() -> None:
     IMAGES.mkdir(exist_ok=True)
     data = load_dataset()
-    X, y = data.X, data.y
+    X, y = Preprocessor().fit_transform(data.X), data.y
     n_objects, n_features = data.shape
 
     section("Датасет")
@@ -80,7 +80,7 @@ def main() -> None:
     print(f"max |ошибка восстановления − E_m|          = {np.max(np.abs(rec_ours - E[1:])):.2e}")
 
     section("Регрессия на главных компонентах (10×5-fold CV)")
-    rmse = pcr_curve(X, y)
+    rmse = pcr_curve(data.X, y)
     for m, r in enumerate(rmse, start=1):
         mark = "  ← m_eff" if m == m_eff else ""
         print(f"m = {m:>2}: RMSE = {r:7.4f}{mark}")
